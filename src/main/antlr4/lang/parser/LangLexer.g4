@@ -1,5 +1,14 @@
 lexer grammar LangLexer;
 
+/* Palavras-chave primeiro (ordem importa!) */
+IF       : 'if' ;
+THEN     : 'then' ;
+ELSE     : 'else' ;
+PRINT    : 'print' ;
+ITERATE  : 'iterate' ;
+ABSTRACT : 'abstract' ;
+DATA     : 'data' ;
+
 fragment DIGIT      : [0-9] ;
 fragment LETTER     : [a-z] ;
 fragment LETTER_UP  : [A-Z] ;
@@ -44,14 +53,5 @@ COLON : ':';
 SEMIC : ';';
 COMMA : ',';
 DOT   : '.';
-
-/* Símbolos adicionais */
-ABSTRACT : 'abstract' ;
-DATA     : 'data' ;
-IF       : 'if' ;
-THEN     : 'then' ;
-ELSE     : 'else' ;
-PRINT    : 'print' ;
-ITERATE  : 'iterate' ;
 
 /* Símbolos adicionais */ 

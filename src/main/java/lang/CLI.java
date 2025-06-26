@@ -1,6 +1,8 @@
 package lang;
 
 import lang.parser.*;
+import lang.builder.AstBuilder;
+import lang.ast.AstNode;
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.ParseTree;
 
@@ -32,8 +34,17 @@ public class CLI {
                     System.err.println("Programa inválido.");
                     System.exit(2);
                 }
-                // TODO: visitar a AST e interpretar
+                
+                // Construir a AST
+                AstBuilder builder = new AstBuilder();
+                AstNode ast = (AstNode) builder.visit(tree);
+                
+                // TODO: interpretar a AST
                 System.err.println("(interpretador ainda não implementado)");
+                System.err.println("AST construída: " + ast.get("type"));
+                if (ast.get("definitions") instanceof java.util.List) {
+                    System.err.println("Definições: " + ((java.util.List<?>) ast.get("definitions")).size());
+                }
             }
         }
     }
