@@ -14,6 +14,12 @@ NEW      : 'new' ;
 TRUE     : 'true' ;
 FALSE    : 'false' ;
 
+/* Tipos básicos */
+INT_TYPE : 'Int' ;
+FLOAT_TYPE : 'Float' ;
+BOOL_TYPE : 'Bool' ;
+CHAR_TYPE : 'Char' ;
+
 fragment DIGIT      : [0-9] ;
 fragment LETTER     : [a-z] ;
 fragment LETTER_UP  : [A-Z] ;
