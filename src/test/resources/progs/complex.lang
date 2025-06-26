@@ -1,0 +1,8 @@
+main() {
+    x = 10
+    y = 5
+    if x > y then
+        print x + y
+    else
+        print x - y
+} 

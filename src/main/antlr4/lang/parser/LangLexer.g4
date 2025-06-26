@@ -5,9 +5,14 @@ IF       : 'if' ;
 THEN     : 'then' ;
 ELSE     : 'else' ;
 PRINT    : 'print' ;
+READ     : 'read' ;
+RETURN   : 'return' ;
 ITERATE  : 'iterate' ;
 ABSTRACT : 'abstract' ;
 DATA     : 'data' ;
+NEW      : 'new' ;
+TRUE     : 'true' ;
+FALSE    : 'false' ;
 
 fragment DIGIT      : [0-9] ;
 fragment LETTER     : [a-z] ;
@@ -18,8 +23,6 @@ TYID    : LETTER_UP (LETTER_UP | LETTER | DIGIT | '_')* ;
 INT     : DIGIT+ ;
 FLOAT   : DIGIT* '.' DIGIT+ ;
 CHAR    : '\'' ( '\\' . | ~['\\\r\n] ) '\'' ;
-TRUE    : 'true' ;
-FALSE   : 'false' ;
 NULL    : 'null' ;
 
 WS              : [ \t\r\n]+ -> skip ;
@@ -34,11 +37,14 @@ GE  : '>=';
 AND : '&&';
 OR  : '||';
 ARROW : '=>';
+DCOLON : '::';
 
 PLUS  : '+';
 MINUS : '-';
 STAR  : '*';
 DIV   : '/';
+PERCENT : '%';
+NOT   : '!';
 LT    : '<';
 GT    : '>';
 ASSIGN: '=';

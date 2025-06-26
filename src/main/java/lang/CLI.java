@@ -1,51 +1,64 @@
 package lang;
 
-import lang.parser.*;
+import lang.parser.LangLexer;
+import lang.parser.LangParser;
 import lang.builder.AstBuilder;
-import lang.ast.AstNode;
-import org.antlr.v4.runtime.*;
+import lang.interpreter.Interpreter;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 
-import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class CLI {
-    public static void main(String[] args) throws Exception {
-        if (args.length != 2 || (!args[0].equals("-syn") && !args[0].equals("-i"))) {
-            System.err.println("Uso: java -jar lang.jar [-syn|-i] arquivo.lang");
+    public static void main(String[] args) {
+        if (args.length != 2) {
+            System.err.println("Usage: java -jar lang.jar [-syn|-i] <file>");
             System.exit(1);
         }
 
-        Path file = Path.of(args[1]);
-        try (FileInputStream in = new FileInputStream(file.toFile())) {
+        String flag = args[0];
+        String filename = args[1];
 
-            CharStream input = CharStreams.fromStream(in);
-            LangLexer lexer = new LangLexer(input);
+        if (!flag.equals("-syn") && !flag.equals("-i")) {
+            System.err.println("Usage: java -jar lang.jar [-syn|-i] <file>");
+            System.exit(1);
+        }
+
+        try {
+            String input = Files.readString(Path.of(filename));
+            
+            LangLexer lexer = new LangLexer(CharStreams.fromString(input));
             CommonTokenStream tokens = new CommonTokenStream(lexer);
             LangParser parser = new LangParser(tokens);
-
+            
             ParseTree tree = parser.prog();
-
-            if (args[0].equals("-syn")) {
-                if (parser.getNumberOfSyntaxErrors() == 0) System.out.println("accept");
-                else System.out.println("reject");
-            } else { // -i
-                if (parser.getNumberOfSyntaxErrors() > 0) {
-                    System.err.println("Programa inválido.");
-                    System.exit(2);
+            
+            if (flag.equals("-syn")) {
+                if (parser.getNumberOfSyntaxErrors() == 0) {
+                    System.out.println("accept");
+                } else {
+                    System.out.println("reject");
                 }
-                
-                // Construir a AST
-                AstBuilder builder = new AstBuilder();
-                AstNode ast = (AstNode) builder.visit(tree);
-                
-                // TODO: interpretar a AST
-                System.err.println("(interpretador ainda não implementado)");
-                System.err.println("AST construída: " + ast.get("type"));
-                if (ast.get("definitions") instanceof java.util.List) {
-                    System.err.println("Definições: " + ((java.util.List<?>) ast.get("definitions")).size());
-                }
+                return;
             }
+            
+            if (parser.getNumberOfSyntaxErrors() > 0) {
+                System.err.println("Syntax errors found!");
+                System.exit(1);
+            }
+            
+            AstBuilder builder = new AstBuilder();
+            var ast = (lang.ast.AstNode) builder.visit(tree);
+            
+            Interpreter interpreter = new Interpreter();
+            interpreter.interpret(ast);
+            
+        } catch (IOException e) {
+            System.err.println("Error reading file: " + e.getMessage());
+            System.exit(1);
         }
     }
 } 

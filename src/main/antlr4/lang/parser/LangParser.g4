@@ -12,7 +12,7 @@ decl        : ID COLON type SEMIC ;
 funDecl     : ID LPAREN params? RPAREN (COLON typeList)? cmd ;
 
 params      : param (COMMA param)* ;
-param       : ID COLON COLON type ;
+param       : ID DCOLON type ;
 typeList    : type (COMMA type)* ;
 
 type        : TYID                            #simpleType
@@ -24,14 +24,25 @@ cmd         : block                           #blockCmd
             | IF expr THEN cmd ELSE cmd       #ifCmd
             | ITERATE expr cmd                #iterateCmd
             | PRINT expr SEMIC?               #printCmd
+            | READ expr SEMIC?                #readCmd
+            | RETURN exprList? SEMIC?         #returnCmd
+            | assign SEMIC?                   #assignCmd
+            | call SEMIC?                     #callCmd
             | expr                            #exprCmd
             ;
 
+assign      : ID ASSIGN expr ;
+call        : ID LPAREN exprList? RPAREN ;
+exprList    : expr (COMMA expr)* ;
+
 block       : LBRACE (cmd (SEMIC)?)* RBRACE ;
 
-expr        : '(' expr ')'                    #paren
-            | op=('+'|'-') expr               #unary
-            | expr op=('*'|'/') expr          #mult
+expr        : expr '.' ID                     #fieldAccess
+            | expr '[' expr ']'               #arrayAccess
+            | expr '(' exprList? ')'          #callExpr
+            | '(' expr ')'                    #paren
+            | op=('+'|'-'|'!') expr           #unary
+            | expr op=('*'|'/'|'%') expr      #mult
             | expr op=('+'|'-') expr          #add
             | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr #rel
             | expr op=('&&'|'||') expr        #bool

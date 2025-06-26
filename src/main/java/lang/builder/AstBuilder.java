@@ -105,9 +105,68 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
     }
 
     @Override
+    public AstNode visitReadCmd(LangParser.ReadCmdContext ctx) {
+        Object expr = visit(ctx.expr());
+        return new AstNode("read", "expr", expr);
+    }
+
+    @Override
+    public AstNode visitReturnCmd(LangParser.ReturnCmdContext ctx) {
+        List<Object> exprs = ctx.exprList() != null ?
+            ctx.exprList().expr().stream()
+                .map(expr -> visit(expr))
+                .collect(Collectors.toList()) :
+            List.of();
+        return new AstNode("return", "exprs", exprs);
+    }
+
+    @Override
+    public AstNode visitAssignCmd(LangParser.AssignCmdContext ctx) {
+        String var = ctx.assign().ID().getText();
+        Object expr = visit(ctx.assign().expr());
+        return new AstNode("assign", "var", var, "expr", expr);
+    }
+
+    @Override
+    public AstNode visitCallCmd(LangParser.CallCmdContext ctx) {
+        String func = ctx.call().ID().getText();
+        List<Object> args = ctx.call().exprList() != null ?
+            ctx.call().exprList().expr().stream()
+                .map(expr -> visit(expr))
+                .collect(Collectors.toList()) :
+            List.of();
+        return new AstNode("call", "func", func, "args", args);
+    }
+
+    @Override
     public AstNode visitExprCmd(LangParser.ExprCmdContext ctx) {
         Object expr = visit(ctx.expr());
         return new AstNode("exprCmd", "expr", expr);
+    }
+
+    @Override
+    public AstNode visitFieldAccess(LangParser.FieldAccessContext ctx) {
+        Object obj = visit(ctx.expr());
+        String field = ctx.ID().getText();
+        return new AstNode("fieldAccess", "obj", obj, "field", field);
+    }
+
+    @Override
+    public AstNode visitArrayAccess(LangParser.ArrayAccessContext ctx) {
+        Object array = visit(ctx.expr(0));
+        Object index = visit(ctx.expr(1));
+        return new AstNode("arrayAccess", "array", array, "index", index);
+    }
+
+    @Override
+    public AstNode visitCallExpr(LangParser.CallExprContext ctx) {
+        Object func = visit(ctx.expr());
+        List<Object> args = ctx.exprList() != null ?
+            ctx.exprList().expr().stream()
+                .map(expr -> visit(expr))
+                .collect(Collectors.toList()) :
+            List.of();
+        return new AstNode("callExpr", "func", func, "args", args);
     }
 
     @Override
