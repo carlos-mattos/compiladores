@@ -64,6 +64,7 @@ public class Interpreter {
         
         switch (type) {
             case "block" -> {
+                scopes.push(new HashMap<>());
                 @SuppressWarnings("unchecked")
                 List<Object> commands = (List<Object>) cmd.get("commands");
                 for (Object command : commands) {
@@ -71,6 +72,7 @@ public class Interpreter {
                         interpretCmd(node);
                     }
                 }
+                scopes.pop();
             }
             case "if" -> {
                 Value condition = interpretExpr((AstNode) cmd.get("condition"));
@@ -81,10 +83,34 @@ public class Interpreter {
                 }
             }
             case "iterate" -> {
-                while (true) {
+                // Verificar se tem lvalue (forma: ITERATE (lvalue : expr) cmd)
+                if (cmd.get("lvalue") != null) {
+                    AstNode lvalue = (AstNode) cmd.get("lvalue");
                     Value condition = interpretExpr((AstNode) cmd.get("condition"));
-                    if (!isTrue(condition)) break;
-                    interpretCmd((AstNode) cmd.get("body"));
+                    AstNode body = (AstNode) cmd.get("body");
+                    
+                    // Para simplificar, vou tratar apenas variáveis simples por enquanto
+                    if ("lvalue".equals(lvalue.get("type")) && lvalue.get("next") == null) {
+                        String varName = (String) lvalue.get("name");
+                        int times = condition.asInt();
+                        
+                        for (int i = 0; i < times; i++) {
+                            // Atribuir o valor atual da iteração à variável
+                            scopes.peek().put(varName, Value.intV(i));
+                            interpretCmd(body);
+                        }
+                    } else {
+                        throw new RuntimeException("Complex lvalue iterate not yet implemented");
+                    }
+                } else {
+                    // Forma simples: ITERATE expr cmd
+                    Value condition = interpretExpr((AstNode) cmd.get("condition"));
+                    AstNode body = (AstNode) cmd.get("body");
+                    
+                    int times = condition.asInt();
+                    for (int i = 0; i < times; i++) {
+                        interpretCmd(body);
+                    }
                 }
             }
             case "print" -> {
@@ -92,26 +118,55 @@ public class Interpreter {
                 System.out.println(valueToString(value));
             }
             case "read" -> {
+                AstNode lvalue = (AstNode) cmd.get("lvalue");
                 Scanner scanner = new Scanner(System.in);
                 if (scanner.hasNextInt()) {
                     int value = scanner.nextInt();
-                    AstNode expr = (AstNode) cmd.get("expr");
-                    if ("var".equals(expr.get("type"))) {
-                        String varName = (String) expr.get("name");
+                    // Para simplificar, vou tratar apenas variáveis simples por enquanto
+                    if ("lvalue".equals(lvalue.get("type")) && lvalue.get("next") == null) {
+                        String varName = (String) lvalue.get("name");
                         scopes.peek().put(varName, Value.intV(value));
+                    } else {
+                        throw new RuntimeException("Complex lvalue read not yet implemented");
                     }
                 }
             }
             case "return" -> {
                 @SuppressWarnings("unchecked")
                 List<Object> exprs = (List<Object>) cmd.get("exprs");
-                Value value = (exprs != null && !exprs.isEmpty()) ? interpretExpr((AstNode) exprs.get(0)) : Value.nullV();
-                throw new ReturnException(value);
+                List<Value> values = new ArrayList<>();
+                
+                if (exprs != null && !exprs.isEmpty()) {
+                    for (Object expr : exprs) {
+                        if (expr instanceof AstNode node) {
+                            values.add(interpretExpr(node));
+                        }
+                    }
+                } else {
+                    values.add(Value.nullV());
+                }
+                
+                throw new ReturnException(values);
             }
             case "assign" -> {
-                String varName = (String) cmd.get("var");
+                AstNode lvalue = (AstNode) cmd.get("lvalue");
                 Value value = interpretExpr((AstNode) cmd.get("expr"));
-                scopes.peek().put(varName, value);
+                
+                // Para simplificar, vou tratar apenas variáveis simples por enquanto
+                if ("lvalue".equals(lvalue.get("type")) && lvalue.get("next") == null) {
+                    String varName = (String) lvalue.get("name");
+                    
+                    // Verificar se a variável já existe no escopo atual
+                    Map<String, Value> currentScope = scopes.peek();
+                    if (currentScope.containsKey(varName)) {
+                        throw new RuntimeException("Variable '" + varName + "' is already defined in this scope");
+                    }
+                    
+                    currentScope.put(varName, value);
+                } else {
+                    // TODO: Implementar atribuição para arrays e campos
+                    throw new RuntimeException("Complex lvalue assignment not yet implemented");
+                }
             }
             case "call" -> {
                 String funcName = (String) cmd.get("func");
@@ -130,8 +185,49 @@ public class Interpreter {
                     try {
                         interpretCmd(func.body);
                     } catch (ReturnException e) {
+                        // Ignorar retornos de chamadas simples
                     }
                     scopes.pop();
+                }
+            }
+            case "callWithRet" -> {
+                String funcName = (String) cmd.get("func");
+                @SuppressWarnings("unchecked")
+                List<Object> args = (List<Object>) cmd.get("args");
+                @SuppressWarnings("unchecked")
+                List<Object> lvalues = (List<Object>) cmd.get("lvalues");
+                
+                FunctionDef func = functions.get(funcName);
+                if (func != null) {
+                    Map<String, Value> newScope = new HashMap<>();
+                    scopes.push(newScope);
+                    for (int i = 0; i < func.params.size() && i < args.size(); i++) {
+                        String paramName = func.params.get(i);
+                        Value argValue = interpretExpr((AstNode) args.get(i));
+                        newScope.put(paramName, argValue);
+                    }
+                    
+                    List<Value> returnValues = new ArrayList<>();
+                    try {
+                        interpretCmd(func.body);
+                    } catch (ReturnException e) {
+                        returnValues = e.values;
+                    }
+                    scopes.pop();
+                    
+                    // Atribuir os valores retornados aos lvalues
+                    for (int i = 0; i < lvalues.size() && i < returnValues.size(); i++) {
+                        AstNode lvalue = (AstNode) lvalues.get(i);
+                        Value value = returnValues.get(i);
+                        
+                        // Para simplificar, vou tratar apenas variáveis simples por enquanto
+                        if ("lvalue".equals(lvalue.get("type")) && lvalue.get("next") == null) {
+                            String varName = (String) lvalue.get("name");
+                            scopes.peek().put(varName, value);
+                        } else {
+                            throw new RuntimeException("Complex lvalue assignment in callWithRet not yet implemented");
+                        }
+                    }
                 }
             }
             case "exprCmd" -> interpretExpr((AstNode) cmd.get("expr"));
@@ -187,10 +283,27 @@ public class Interpreter {
                         try {
                             interpretCmd(function.body);
                         } catch (ReturnException e) {
-                            result = e.value;
+                            // Retornar o primeiro valor da lista de retornos
+                            if (!e.values.isEmpty()) {
+                                result = e.values.get(0);
+                            }
                         }
                         scopes.pop();
                         yield result;
+                    }
+                }
+                yield Value.nullV();
+            }
+            case "select" -> {
+                // Seleção [idx] de valor retornado
+                Value base = interpretExpr((AstNode) expr.get("base"));
+                Value index = interpretExpr((AstNode) expr.get("index"));
+                
+                if (base.getType() == Value.Type.ARRAY && index.getType() == Value.Type.INT) {
+                    List<Value> elems = base.asArray();
+                    int idx = index.asInt();
+                    if (idx >= 0 && idx < elems.size()) {
+                        yield elems.get(idx);
                     }
                 }
                 yield Value.nullV();
@@ -223,9 +336,12 @@ public class Interpreter {
     }
     
     private static class ReturnException extends RuntimeException {
-        public final Value value;
+        public final List<Value> values;
+        public ReturnException(List<Value> values) {
+            this.values = values;
+        }
         public ReturnException(Value value) {
-            this.value = value;
+            this.values = List.of(value);
         }
     }
     
@@ -396,5 +512,64 @@ public class Interpreter {
             return "null";
         }
         return "unknown";
+    }
+    
+    private Value interpretLvalue(AstNode lvalue) {
+        if (!"lvalue".equals(lvalue.get("type"))) {
+            return Value.nullV();
+        }
+        
+        String name = (String) lvalue.get("name");
+        Value value = null;
+        
+        // Procurar a variável nos escopos
+        for (Map<String, Value> scope : scopes) {
+            if (scope.containsKey(name)) {
+                value = scope.get(name);
+                break;
+            }
+        }
+        
+        if (value == null) {
+            return Value.nullV();
+        }
+        
+        // Processar acessos encadeados (array, campo)
+        AstNode current = lvalue;
+        while (current.get("next") != null) {
+            AstNode next = (AstNode) current.get("next");
+            String nextType = (String) next.get("type");
+            
+            if ("arrayAccess".equals(nextType)) {
+                Value index = interpretExpr((AstNode) next.get("index"));
+                if (value.getType() == Value.Type.ARRAY && index.getType() == Value.Type.INT) {
+                    List<Value> elems = value.asArray();
+                    int idx = index.asInt();
+                    if (idx >= 0 && idx < elems.size()) {
+                        value = elems.get(idx);
+                    } else {
+                        return Value.nullV();
+                    }
+                } else {
+                    return Value.nullV();
+                }
+            } else if ("fieldAccess".equals(nextType)) {
+                String field = (String) next.get("field");
+                if (value.getType() == Value.Type.RECORD) {
+                    Map<String, Value> fields = value.asRecord();
+                    if (fields.containsKey(field)) {
+                        value = fields.get(field);
+                    } else {
+                        return Value.nullV();
+                    }
+                } else {
+                    return Value.nullV();
+                }
+            }
+            
+            current = next;
+        }
+        
+        return value;
     }
 } 

@@ -22,17 +22,25 @@ type        : TYID                            #simpleType
 
 cmd         : block                           #blockCmd
             | IF expr THEN cmd ELSE cmd       #ifCmd
-            | ITERATE expr cmd                #iterateCmd
+            | iterateCmd                      #iterate
             | PRINT expr SEMIC?               #printCmd
-            | READ expr SEMIC?                #readCmd
+            | READ lvalue SEMIC?              #readCmd
             | RETURN exprList? SEMIC?         #returnCmd
             | assign SEMIC?                   #assignCmd
             | call SEMIC?                     #callCmd
+            | callWithRet SEMIC?              #callWithRetCmd
             | expr                            #exprCmd
             ;
 
-assign      : ID ASSIGN expr ;
+iterateCmd  : ITERATE expr cmd                #iterateSimple
+            | ITERATE LPAREN lvalue COLON expr RPAREN cmd #iterateWithLvalue
+            | ITERATE LPAREN expr RPAREN cmd  #iterateWithParen
+            ;
+
+lvalue      : ID (LBRACK expr RBRACK | DOT ID)* ;
+assign      : lvalue ASSIGN expr ;
 call        : ID LPAREN exprList? RPAREN ;
+callWithRet : ID LPAREN exprList? RPAREN LT lvalue (COMMA lvalue)* GT ;
 exprList    : expr (COMMA expr)* ;
 
 block       : LBRACE (cmd (SEMIC)?)* RBRACE ;
@@ -52,4 +60,5 @@ expr        : expr '.' ID                     #fieldAccess
             | TRUE                            #trueLit
             | FALSE                           #falseLit
             | CHAR                            #charLit
+            | NULL                            #nullLit
             ; 

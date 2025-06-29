@@ -3,9 +3,11 @@ package lang.builder;
 import lang.parser.LangParser;
 import lang.parser.LangParserBaseVisitor;
 import lang.ast.AstNode;
+import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
 
 public class AstBuilder extends LangParserBaseVisitor<Object> {
 
@@ -92,13 +94,6 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
     }
 
     @Override
-    public AstNode visitIterateCmd(LangParser.IterateCmdContext ctx) {
-        Object condition = visit(ctx.expr());
-        Object body = visit(ctx.cmd());
-        return new AstNode("iterate", "condition", condition, "body", body);
-    }
-
-    @Override
     public AstNode visitPrintCmd(LangParser.PrintCmdContext ctx) {
         Object expr = visit(ctx.expr());
         return new AstNode("print", "expr", expr);
@@ -106,8 +101,8 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
 
     @Override
     public AstNode visitReadCmd(LangParser.ReadCmdContext ctx) {
-        Object expr = visit(ctx.expr());
-        return new AstNode("read", "expr", expr);
+        Object lvalue = visit(ctx.lvalue());
+        return new AstNode("read", "lvalue", lvalue);
     }
 
     @Override
@@ -122,9 +117,9 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
 
     @Override
     public AstNode visitAssignCmd(LangParser.AssignCmdContext ctx) {
-        String var = ctx.assign().ID().getText();
+        Object lvalue = visit(ctx.assign().lvalue());
         Object expr = visit(ctx.assign().expr());
-        return new AstNode("assign", "var", var, "expr", expr);
+        return new AstNode("assign", "lvalue", lvalue, "expr", expr);
     }
 
     @Override
@@ -250,7 +245,75 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
     }
 
     @Override
+    public AstNode visitNullLit(LangParser.NullLitContext ctx) {
+        return new AstNode("null", "value", null);
+    }
+
+    @Override
     public AstNode visitParen(LangParser.ParenContext ctx) {
-        return (AstNode) visit(ctx.expr());
+        Object result = visit(ctx.expr());
+        return (result instanceof AstNode) ? (AstNode) result : null;
+    }
+
+    public AstNode visitIterateSimple(LangParser.IterateSimpleContext ctx) {
+        Object condition = visit(ctx.expr());
+        Object body = visit(ctx.cmd());
+        return new AstNode("iterate", "condition", condition, "body", body);
+    }
+
+    public AstNode visitIterateWithLvalue(LangParser.IterateWithLvalueContext ctx) {
+        Object lvalue = visit(ctx.lvalue());
+        Object condition = visit(ctx.expr());
+        Object body = visit(ctx.cmd());
+        return new AstNode("iterate", "lvalue", lvalue, "condition", condition, "body", body);
+    }
+
+    public AstNode visitIterateWithParen(LangParser.IterateWithParenContext ctx) {
+        Object condition = visit(ctx.expr());
+        Object body = visit(ctx.cmd());
+        return new AstNode("iterate", "condition", condition, "body", body);
+    }
+
+    @Override
+    public AstNode visitCallWithRetCmd(LangParser.CallWithRetCmdContext ctx) {
+        Object result = visit(ctx.callWithRet());
+        return (result instanceof AstNode) ? (AstNode) result : null;
+    }
+
+    public AstNode visitCallWithRet(LangParser.CallWithRetContext ctx) {
+        String func = ctx.ID().getText();
+        List<Object> args = ctx.exprList() != null ?
+            ctx.exprList().expr().stream().map(this::visit).collect(Collectors.toList()) :
+            List.of();
+        List<Object> lvalues = ctx.lvalue().stream().map(this::visit).collect(Collectors.toList());
+        return new AstNode("callWithRet", "func", func, "args", args, "lvalues", lvalues);
+    }
+
+    @Override
+    public AstNode visitLvalue(LangParser.LvalueContext ctx) {
+        AstNode node = new AstNode("lvalue", "name", ctx.ID(0).getText());
+        AstNode current = node;
+        int exprIdx = 0;
+        int idIdx = 1;
+        List<TerminalNode> lbracks = ctx.LBRACK();
+        List<TerminalNode> dots = ctx.DOT();
+        int lbrackIdx = 0, dotIdx = 0;
+        for (int i = 1; i < ctx.getChildCount(); i++) {
+            if (lbrackIdx < lbracks.size() && ctx.getChild(i).getText().equals("[")) {
+                Object index = visit(ctx.expr(exprIdx++));
+                AstNode arr = new AstNode("arrayAccess", "index", index);
+                current.put("next", arr);
+                current = arr;
+                lbrackIdx++;
+            } else if (dotIdx < dots.size() && ctx.getChild(i).getText().equals(".")) {
+                String field = ctx.ID(idIdx++).getText();
+                AstNode fld = new AstNode("fieldAccess", "field", field);
+                current.put("next", fld);
+                current = fld;
+                dotIdx++;
+                i++; // skip field name
+            }
+        }
+        return node;
     }
 } 
