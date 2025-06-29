@@ -1,0 +1,1 @@
+mvn -q clean package && mvn -q test 
