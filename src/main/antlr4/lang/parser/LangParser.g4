@@ -16,6 +16,10 @@ param       : ID DCOLON type ;
 typeList    : type (COMMA type)* ;
 
 type        : TYID                            #simpleType
+            | INT_TYPE                        #intType
+            | FLOAT_TYPE                      #floatType
+            | BOOL_TYPE                       #boolType
+            | CHAR_TYPE                       #charType
             | LBRACK type RBRACK              #arrayType
             | type STAR type                  #productType
             ;
@@ -32,10 +36,7 @@ cmd         : block                           #blockCmd
             | expr                            #exprCmd
             ;
 
-iterateCmd  : ITERATE expr cmd                #iterateSimple
-            | ITERATE LPAREN lvalue COLON expr RPAREN cmd #iterateWithLvalue
-            | ITERATE LPAREN expr RPAREN cmd  #iterateWithParen
-            ;
+iterateCmd  : ITERATE LPAREN (lvalue COLON expr | expr) RPAREN cmd ;
 
 lvalue      : ID (LBRACK expr RBRACK | DOT ID)* ;
 assign      : lvalue ASSIGN expr ;
@@ -61,4 +62,7 @@ expr        : expr '.' ID                     #fieldAccess
             | FALSE                           #falseLit
             | CHAR                            #charLit
             | NULL                            #nullLit
+            | NEW TYID                        #newRecord
+            | NEW TYID LBRACK expr RBRACK     #newArray
+            | LBRACK exprList? RBRACK         #arrayLit
             ; 

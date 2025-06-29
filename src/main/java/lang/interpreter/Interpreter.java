@@ -2,6 +2,7 @@ package lang.interpreter;
 
 import lang.ast.AstNode;
 import java.util.*;
+import java.util.Collections;
 
 public class Interpreter {
     private final Map<String, Value> variables = new HashMap<>();
@@ -83,34 +84,26 @@ public class Interpreter {
                 }
             }
             case "iterate" -> {
-                // Verificar se tem lvalue (forma: ITERATE (lvalue : expr) cmd)
-                if (cmd.get("lvalue") != null) {
-                    AstNode lvalue = (AstNode) cmd.get("lvalue");
-                    Value condition = interpretExpr((AstNode) cmd.get("condition"));
-                    AstNode body = (AstNode) cmd.get("body");
-                    
-                    // Para simplificar, vou tratar apenas variáveis simples por enquanto
-                    if ("lvalue".equals(lvalue.get("type")) && lvalue.get("next") == null) {
-                        String varName = (String) lvalue.get("name");
-                        int times = condition.asInt();
-                        
-                        for (int i = 0; i < times; i++) {
-                            // Atribuir o valor atual da iteração à variável
-                            scopes.peek().put(varName, Value.intV(i));
-                            interpretCmd(body);
-                        }
+                if (cmd.get("id") != null) {       // forma com variável
+                    AstNode idLv = (AstNode) cmd.get("id");
+                    Value base = interpretExpr((AstNode) cmd.get("expr"));
+                    List<Value> elems;
+                    if (base.getType() == Value.Type.INT) {
+                        int n = base.asInt();
+                        elems = new ArrayList<>();
+                        for (int k = n; k >= 1; k--) elems.add(Value.intV(k));   // ordem decrescente
+                    } else if (base.getType() == Value.Type.ARRAY) {
+                        elems = base.asArray();
                     } else {
-                        throw new RuntimeException("Complex lvalue iterate not yet implemented");
+                        throw new RuntimeException("iterate expects int or array");
                     }
-                } else {
-                    // Forma simples: ITERATE expr cmd
-                    Value condition = interpretExpr((AstNode) cmd.get("condition"));
-                    AstNode body = (AstNode) cmd.get("body");
-                    
-                    int times = condition.asInt();
-                    for (int i = 0; i < times; i++) {
-                        interpretCmd(body);
+                    for (Value v : elems) {
+                        assign(idLv, v);     // agora aceita lvalue composto
+                        interpretCmd((AstNode) cmd.get("body"));
                     }
+                } else {                            // iterate(expr)
+                    int n = interpretExpr((AstNode) cmd.get("expr")).asInt();
+                    for (int k = 0; k < n; k++) interpretCmd((AstNode) cmd.get("body"));
                 }
             }
             case "print" -> {
@@ -122,13 +115,7 @@ public class Interpreter {
                 Scanner scanner = new Scanner(System.in);
                 if (scanner.hasNextInt()) {
                     int value = scanner.nextInt();
-                    // Para simplificar, vou tratar apenas variáveis simples por enquanto
-                    if ("lvalue".equals(lvalue.get("type")) && lvalue.get("next") == null) {
-                        String varName = (String) lvalue.get("name");
-                        scopes.peek().put(varName, Value.intV(value));
-                    } else {
-                        throw new RuntimeException("Complex lvalue read not yet implemented");
-                    }
+                    assign(lvalue, Value.intV(value));
                 }
             }
             case "return" -> {
@@ -151,22 +138,7 @@ public class Interpreter {
             case "assign" -> {
                 AstNode lvalue = (AstNode) cmd.get("lvalue");
                 Value value = interpretExpr((AstNode) cmd.get("expr"));
-                
-                // Para simplificar, vou tratar apenas variáveis simples por enquanto
-                if ("lvalue".equals(lvalue.get("type")) && lvalue.get("next") == null) {
-                    String varName = (String) lvalue.get("name");
-                    
-                    // Verificar se a variável já existe no escopo atual
-                    Map<String, Value> currentScope = scopes.peek();
-                    if (currentScope.containsKey(varName)) {
-                        throw new RuntimeException("Variable '" + varName + "' is already defined in this scope");
-                    }
-                    
-                    currentScope.put(varName, value);
-                } else {
-                    // TODO: Implementar atribuição para arrays e campos
-                    throw new RuntimeException("Complex lvalue assignment not yet implemented");
-                }
+                assign(lvalue, value);
             }
             case "call" -> {
                 String funcName = (String) cmd.get("func");
@@ -219,14 +191,7 @@ public class Interpreter {
                     for (int i = 0; i < lvalues.size() && i < returnValues.size(); i++) {
                         AstNode lvalue = (AstNode) lvalues.get(i);
                         Value value = returnValues.get(i);
-                        
-                        // Para simplificar, vou tratar apenas variáveis simples por enquanto
-                        if ("lvalue".equals(lvalue.get("type")) && lvalue.get("next") == null) {
-                            String varName = (String) lvalue.get("name");
-                            scopes.peek().put(varName, value);
-                        } else {
-                            throw new RuntimeException("Complex lvalue assignment in callWithRet not yet implemented");
-                        }
+                        assign(lvalue, value);
                     }
                 }
             }
@@ -279,14 +244,11 @@ public class Interpreter {
                             Value argValue = interpretExpr((AstNode) args.get(i));
                             newScope.put(paramName, argValue);
                         }
-                        Value result = Value.nullV();
+                        Value result = Value.arrayV(new ArrayList<>()); // lista vazia por padrão
                         try {
                             interpretCmd(function.body);
                         } catch (ReturnException e) {
-                            // Retornar o primeiro valor da lista de retornos
-                            if (!e.values.isEmpty()) {
-                                result = e.values.get(0);
-                            }
+                            result = Value.arrayV(e.values);   // devolve sempre lista
                         }
                         scopes.pop();
                         yield result;
@@ -330,6 +292,21 @@ public class Interpreter {
                     }
                 }
                 yield Value.nullV();
+            }
+            case "newRec" -> Value.recordV(new HashMap<>()); // campos default = null
+            case "newArr" -> {
+                int n = interpretExpr((AstNode) expr.get("size")).asInt();
+                List<Value> list = new ArrayList<>(Collections.nCopies(n, Value.nullV()));
+                yield Value.arrayV(list);
+            }
+            case "arrayLit" -> {
+                @SuppressWarnings("unchecked")
+                List<Object> elements = (List<Object>) expr.get("elements");
+                List<Value> values = new ArrayList<>();
+                for (Object element : elements) {
+                    values.add(interpretExpr((AstNode) element));
+                }
+                yield Value.arrayV(values);
             }
             default -> Value.nullV();
         };
@@ -571,5 +548,57 @@ public class Interpreter {
         }
         
         return value;
+    }
+
+    private Value lookupVar(String id) {
+        for (var s : scopes) if (s.containsKey(id)) return s.get(id);
+        return Value.nullV();
+    }
+
+    private Value deref(AstNode lv) { /* usa enquanto lê */
+        if (!"lvalue".equals(lv.get("type"))) return Value.nullV();
+        Value base = lookupVar((String) lv.get("name"));
+        AstNode cur = lv;
+        while (cur.get("next") != null) {
+            AstNode nxt = (AstNode) cur.get("next");
+            if ("arrayAccess".equals(nxt.get("type"))) {
+                int i = interpretExpr((AstNode) nxt.get("index")).asInt();
+                base = base.asArray().get(i);
+            } else { // field
+                String f = (String) nxt.get("field");
+                base = base.asRecord().get(f);
+            }
+            cur = nxt;
+        }
+        return base;
+    }
+
+    private void assign(AstNode lv, Value v) {
+        if (!"lvalue".equals(lv.get("type"))) throw new RuntimeException("not an lvalue");
+        if (lv.get("next") == null) {
+            scopes.peek().put((String) lv.get("name"), v);
+        } else {
+            Value base = lookupVar((String) lv.get("name"));
+            AstNode cur = lv;
+            AstNode prev = null;
+            while (cur.get("next") != null) {
+                prev = cur;
+                cur = (AstNode) cur.get("next");
+            }
+            if ("arrayAccess".equals(cur.get("type"))) {
+                int i = interpretExpr((AstNode) cur.get("index")).asInt();
+                base.asArray().set(i, v);
+            } else if ("fieldAccess".equals(cur.get("type"))) {
+                String f = (String) cur.get("field");
+                Map<String, Value> rec = base.asRecord();
+                if (rec == null) {
+                    // Se o record não foi inicializado, crie um novo
+                    rec = new HashMap<>();
+                    // Substitua o valor na variável original
+                    scopes.peek().put((String) lv.get("name"), Value.recordV(rec));
+                }
+                rec.put(f, v);
+            }
+        }
     }
 } 

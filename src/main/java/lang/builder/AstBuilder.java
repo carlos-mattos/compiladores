@@ -255,23 +255,20 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
         return (result instanceof AstNode) ? (AstNode) result : null;
     }
 
-    public AstNode visitIterateSimple(LangParser.IterateSimpleContext ctx) {
-        Object condition = visit(ctx.expr());
+    @Override
+    public AstNode visitIterateCmd(LangParser.IterateCmdContext ctx) {
         Object body = visit(ctx.cmd());
-        return new AstNode("iterate", "condition", condition, "body", body);
-    }
-
-    public AstNode visitIterateWithLvalue(LangParser.IterateWithLvalueContext ctx) {
-        Object lvalue = visit(ctx.lvalue());
-        Object condition = visit(ctx.expr());
-        Object body = visit(ctx.cmd());
-        return new AstNode("iterate", "lvalue", lvalue, "condition", condition, "body", body);
-    }
-
-    public AstNode visitIterateWithParen(LangParser.IterateWithParenContext ctx) {
-        Object condition = visit(ctx.expr());
-        Object body = visit(ctx.cmd());
-        return new AstNode("iterate", "condition", condition, "body", body);
+        
+        if (ctx.lvalue() != null) {
+            // Forma: ITERATE '(' lvalue ':' expr ')' cmd
+            Object lvalue = visit(ctx.lvalue());
+            Object expr = visit(ctx.expr());
+            return new AstNode("iterate", "id", lvalue, "expr", expr, "body", body);
+        } else {
+            // Forma: ITERATE '(' expr ')' cmd
+            Object expr = visit(ctx.expr());
+            return new AstNode("iterate", "expr", expr, "body", body);
+        }
     }
 
     @Override
@@ -315,5 +312,36 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
             }
         }
         return node;
+    }
+
+    public AstNode visitNewRecord(LangParser.NewRecordContext ctx) {
+        return new AstNode("newRec", "type", ctx.TYID().getText());
+    }
+
+    public AstNode visitNewArray(LangParser.NewArrayContext ctx) {
+        return new AstNode("newArr", "type", ctx.TYID().getText(), "size", visit(ctx.expr()));
+    }
+
+    public AstNode visitArrayLit(LangParser.ArrayLitContext ctx) {
+        List<Object> elements = ctx.exprList() != null ?
+            ctx.exprList().expr().stream().map(this::visit).collect(Collectors.toList()) :
+            List.of();
+        return new AstNode("arrayLit", "elements", elements);
+    }
+
+    public AstNode visitIntType(LangParser.IntTypeContext ctx) {
+        return new AstNode("type", "name", "Int");
+    }
+
+    public AstNode visitFloatType(LangParser.FloatTypeContext ctx) {
+        return new AstNode("type", "name", "Float");
+    }
+
+    public AstNode visitBoolType(LangParser.BoolTypeContext ctx) {
+        return new AstNode("type", "name", "Bool");
+    }
+
+    public AstNode visitCharType(LangParser.CharTypeContext ctx) {
+        return new AstNode("type", "name", "Char");
     }
 } 

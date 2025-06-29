@@ -81,4 +81,58 @@ public class CLITest {
         });
         assertTrue(output.contains("15"));
     }
+
+    @Test
+    void iterateIdInt() throws Exception {
+        run("""
+            main(){ iterate(i:5){ print i } }
+            """, "5\n4\n3\n2\n1");
+    }
+
+    @Test
+    void iterateIdArray() throws Exception {
+        run("""
+            main(){ iterate(e:[1,2,3]){ print e } }
+            """, "1\n2\n3");
+    }
+
+    @Test
+    void tupleSelection() throws Exception {
+        run("""
+            divmod(a::Int,b::Int):Int,Int{ q=a/b; r=a%b; return q,r }
+            main(){ print divmod(7,3)[1] }
+            """, "1");
+    }
+
+    @Test
+    void newAndField() throws Exception {
+        run("data R{ n: Int; }  main(){ r=new R; r.n=7; print r.n }", "7\n");
+    }
+
+    private void run(String code, String expectedOutput) throws Exception {
+        // Criar arquivo temporário
+        Path tempFile = Files.createTempFile("test", ".lang");
+        Files.write(tempFile, code.getBytes());
+        
+        try {
+            // Executar CLI
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            PrintStream originalOut = System.out;
+            System.setOut(new PrintStream(baos));
+            
+            CLI.main(new String[]{"-i", tempFile.toString()});
+            
+            System.setOut(originalOut);
+            String output = baos.toString();
+            
+            // Normalizar quebras de linha (CRLF -> LF)
+            String normalizedOutput = output.replace("\r\n", "\n");
+            String normalizedExpected = expectedOutput.replace("\r\n", "\n");
+            
+            // Comparar saída ignorando espaços/quebras de linha finais
+            assertEquals(normalizedExpected.trim(), normalizedOutput.trim());
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
+    }
 } 
