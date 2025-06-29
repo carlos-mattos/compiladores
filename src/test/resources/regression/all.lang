@@ -1,0 +1,31 @@
+data R { n : Int ; }
+
+divmod(a::Int, b::Int) : Int, Int {
+  q = a / b ;
+  r = a % b ;
+  return q , r
+}
+
+main() {
+  -- iterate inteiro (decrescente)
+  iterate(i : 3) { print i }
+
+  -- iterate array
+  iterate(e : [4,5]) { print e }
+
+  -- array literal + atribuição composta
+  v = [1,2,3] ;
+  v[1] = 9 ;
+  print v[1]
+
+  -- new record + campo
+  r = new R ;
+  r.n = 7 ;
+  print r.n
+
+  -- múltiplos retornos, seleção & atribuição
+  x = 0 ; y = 0
+  divmod(7,3) < x , y >
+  print divmod(7,3)[1]
+  print y
+} 
