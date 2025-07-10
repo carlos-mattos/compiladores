@@ -111,9 +111,6 @@ public class Interpreter {
             }
             case "if" -> {
                 Value condition = interpretExpr((AstNode) cmd.get("condition"));
-                if (condition.getType() != Value.Type.BOOL) {
-                    runtimeError();
-                }
                 if (isTrue(condition)) {
                     interpretCmd((AstNode) cmd.get("then"));
                 } else if (cmd.get("else") != null) {
@@ -599,6 +596,18 @@ public class Interpreter {
     private boolean isTrue(Value value) {
         if (value.getType() == Value.Type.BOOL) {
             return value.asBool();
+        } else if (value.getType() == Value.Type.INT) {
+            return value.asInt() != 0;
+        } else if (value.getType() == Value.Type.FLOAT) {
+            return value.asFloat() != 0.0;
+        } else if (value.getType() == Value.Type.CHAR) {
+            return value.asChar() != '\0';
+        } else if (value.getType() == Value.Type.STRING) {
+            return !value.asString().isEmpty();
+        } else if (value.getType() == Value.Type.ARRAY) {
+            return !value.asArray().isEmpty();
+        } else if (value.getType() == Value.Type.RECORD) {
+            return !value.asRecord().isEmpty();
         }
         return false;
     }

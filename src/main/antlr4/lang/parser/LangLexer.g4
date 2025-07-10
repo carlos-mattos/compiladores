@@ -39,7 +39,7 @@ NULL    : 'null' ;
 
 WS              : [ \t\r\n]+ -> skip ;
 LINE_COMMENT    : '--' ~[\r\n]* -> skip ;
-BLOCK_COMMENT   : '{-' (~[{-}] | '-' ~[}])* '-}' -> skip ;
+BLOCK_COMMENT   : '{-' (BLOCK_COMMENT | ~[{-}])* '-}' -> skip ;
 
 /* Símbolos fixos (ordem importa para evita conflitos) */
 EQ  : '==';
