@@ -1,3 +1,8 @@
+/*
+ * allan amaral - 201935001
+ * carlos mattos - 201935003
+ */
+
 parser grammar LangParser;
 
 options { tokenVocab = LangLexer; }
