@@ -1,0 +1,9 @@
+main() {
+    print '\n'
+    print '\t'
+    print '\r'
+    print '\b'
+    print '\''
+    print '\\'
+    print '\123'
+} 

@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 public class Value {
-    public enum Type { INT, FLOAT, BOOL, CHAR, NULL, ARRAY, RECORD }
+    public enum Type { INT, FLOAT, BOOL, CHAR, NULL, ARRAY, RECORD, STRING }
     
     private final Type type;
     private final Object value;
@@ -21,6 +21,7 @@ public class Value {
     public static Value nullV() { return new Value(Type.NULL, null); }
     public static Value arrayV(List<Value> elems) { return new Value(Type.ARRAY, elems); }
     public static Value recordV(Map<String, Value> fields) { return new Value(Type.RECORD, fields); }
+    public static Value stringV(String value) { return new Value(Type.STRING, value); }
     
     public Type getType() { return type; }
     public Object getValue() { return value; }
@@ -31,4 +32,5 @@ public class Value {
     public char asChar() { return (Character) value; }
     public List<Value> asArray() { return (List<Value>) value; }
     public Map<String, Value> asRecord() { return (Map<String, Value>) value; }
+    public String asString() { return (String) value; }
 } 

@@ -9,6 +9,21 @@ public class Interpreter {
     private final Map<String, FunctionDef> functions = new HashMap<>();
     private final Deque<Map<String, Value>> scopes = new ArrayDeque<>();
     private final Map<String, List<String>> typeTable = new HashMap<>();
+    private boolean testMode = false;
+    
+    public void setTestMode(boolean mode) {
+        testMode = mode;
+    }
+    
+    private void runtimeError() {
+        System.out.println("runtime error");
+        System.out.flush();
+        if (!testMode) {
+            System.exit(3);
+        } else {
+            throw new RuntimeException("runtime error");
+        }
+    }
     
     public static class FunctionDef {
         public final List<String> params;
@@ -91,31 +106,34 @@ public class Interpreter {
             }
             case "if" -> {
                 Value condition = interpretExpr((AstNode) cmd.get("condition"));
+                if (condition.getType() != Value.Type.BOOL) {
+                    runtimeError();
+                }
                 if (isTrue(condition)) {
                     interpretCmd((AstNode) cmd.get("then"));
-                } else {
+                } else if (cmd.get("else") != null) {
                     interpretCmd((AstNode) cmd.get("else"));
                 }
             }
             case "iterate" -> {
-                if (cmd.get("id") != null) {       // forma com variável
+                if (cmd.get("id") != null) {      
                     AstNode idLv = (AstNode) cmd.get("id");
                     Value base = interpretExpr((AstNode) cmd.get("expr"));
                     List<Value> elems;
                     if (base.getType() == Value.Type.INT) {
                         int n = base.asInt();
                         elems = new ArrayList<>();
-                        for (int k = n; k >= 1; k--) elems.add(Value.intV(k));   // ordem decrescente
+                        for (int k = n; k >= 1; k--) elems.add(Value.intV(k));   
                     } else if (base.getType() == Value.Type.ARRAY) {
                         elems = base.asArray();
                     } else {
                         throw new RuntimeException("iterate expects int or array");
                     }
                     for (Value v : elems) {
-                        assign(idLv, v);     // agora aceita lvalue composto
+                        assign(idLv, v);     
                         interpretCmd((AstNode) cmd.get("body"));
                     }
-                } else {                            // iterate(expr)
+                } else {                           
                     int n = interpretExpr((AstNode) cmd.get("expr")).asInt();
                     if (n > 0) {
                         for (int k = 0; k < n; k++) interpretCmd((AstNode) cmd.get("body"));
@@ -129,9 +147,54 @@ public class Interpreter {
             case "read" -> {
                 AstNode lvalue = (AstNode) cmd.get("lvalue");
                 Scanner scanner = new Scanner(System.in);
-                if (scanner.hasNextInt()) {
-                    int value = scanner.nextInt();
-                    assign(lvalue, Value.intV(value));
+                
+                String varName = extractTypeName(lvalue.get("name"));
+                Value currentValue = null;
+                
+                for (Map<String, Value> scope : scopes) {
+                    if (scope.containsKey(varName)) {
+                        currentValue = scope.get(varName);
+                        break;
+                    }
+                }
+                
+                if (currentValue != null) {
+                    switch (currentValue.getType()) {
+                        case INT -> {
+                            if (scanner.hasNextInt()) {
+                                assign(lvalue, Value.intV(scanner.nextInt()));
+                            }
+                        }
+                        case FLOAT -> {
+                            if (scanner.hasNextDouble()) {
+                                assign(lvalue, Value.floatV(scanner.nextDouble()));
+                            }
+                        }
+                        case CHAR -> {
+                            if (scanner.hasNext()) {
+                                String input = scanner.next();
+                                if (input.length() > 0) {
+                                    assign(lvalue, Value.charV(input.charAt(0)));
+                                }
+                            }
+                        }
+                        case BOOL -> {
+                            if (scanner.hasNextBoolean()) {
+                                assign(lvalue, Value.boolV(scanner.nextBoolean()));
+                            }
+                        }
+                        default -> {
+                            if (scanner.hasNextInt()) {
+                                assign(lvalue, Value.intV(scanner.nextInt()));
+                            } else if (scanner.hasNextDouble()) {
+                                assign(lvalue, Value.floatV(scanner.nextDouble()));
+                            }
+                        }
+                    }
+                } else {
+                    if (scanner.hasNextInt()) {
+                        assign(lvalue, Value.intV(scanner.nextInt()));
+                    }
                 }
             }
             case "return" -> {
@@ -172,9 +235,7 @@ public class Interpreter {
                     }
                     try {
                         interpretCmd(func.body);
-                    } catch (ReturnException e) {
-                        // Ignorar retornos de chamadas simples
-                    }
+                    } catch (ReturnException e) {}
                     scopes.pop();
                 }
             }
@@ -203,7 +264,6 @@ public class Interpreter {
                     }
                     scopes.pop();
                     
-                    // Atribuir os valores retornados aos lvalues
                     for (int i = 0; i < lvalues.size() && i < returnValues.size(); i++) {
                         AstNode lvalue = (AstNode) lvalues.get(i);
                         Value value = returnValues.get(i);
@@ -231,6 +291,7 @@ public class Interpreter {
             case "float" -> Value.floatV((Double) expr.get("value"));
             case "bool" -> Value.boolV((Boolean) expr.get("value"));
             case "char" -> Value.charV((Character) expr.get("value"));
+            case "string" -> Value.stringV((String) expr.get("value"));
             case "var" -> {
                 Object nameObj = expr.get("name");
                 String name = extractTypeName(nameObj);
@@ -244,10 +305,26 @@ public class Interpreter {
                 yield value != null ? value : Value.nullV();
             }
             case "bin" -> {
-                Value left = interpretExpr((AstNode) expr.get("left"));
-                Value right = interpretExpr((AstNode) expr.get("right"));
                 String op = (String) expr.get("op");
-                yield evaluateBinOp(left, right, op);
+                if ("&&".equals(op)) {
+                    Value left = interpretExpr((AstNode) expr.get("left"));
+                    if (!isTrue(left)) {
+                        yield Value.boolV(false);
+                    }
+                    Value right = interpretExpr((AstNode) expr.get("right"));
+                    yield Value.boolV(isTrue(right));
+                } else if ("||".equals(op)) {
+                    Value left = interpretExpr((AstNode) expr.get("left"));
+                    if (isTrue(left)) {
+                        yield Value.boolV(true);
+                    }
+                    Value right = interpretExpr((AstNode) expr.get("right"));
+                    yield Value.boolV(isTrue(right));
+                } else {
+                    Value left = interpretExpr((AstNode) expr.get("left"));
+                    Value right = interpretExpr((AstNode) expr.get("right"));
+                    yield evaluateBinOp(left, right, op);
+                }
             }
             case "un" -> {
                 Value operand = interpretExpr((AstNode) expr.get("expr"));
@@ -269,11 +346,11 @@ public class Interpreter {
                             Value argValue = interpretExpr((AstNode) args.get(i));
                             newScope.put(paramName, argValue);
                         }
-                        Value result = Value.arrayV(new ArrayList<>()); // lista vazia por padrão
+                        Value result = Value.arrayV(new ArrayList<>()); 
                         try {
                             interpretCmd(function.body);
                         } catch (ReturnException e) {
-                            result = Value.arrayV(e.values);   // devolve sempre lista
+                            result = Value.arrayV(e.values);   
                         }
                         scopes.pop();
                         yield result;
@@ -282,7 +359,6 @@ public class Interpreter {
                 yield Value.nullV();
             }
             case "select" -> {
-                // Seleção [idx] de valor retornado
                 Value base = interpretExpr((AstNode) expr.get("base"));
                 Value index = interpretExpr((AstNode) expr.get("index"));
                 
@@ -301,9 +377,10 @@ public class Interpreter {
                 if (array.getType() == Value.Type.ARRAY && index.getType() == Value.Type.INT) {
                     List<Value> elems = array.asArray();
                     int idx = index.asInt();
-                    if (idx >= 0 && idx < elems.size()) {
-                        yield elems.get(idx);
+                    if (idx < 0 || idx >= elems.size()) {
+                        runtimeError();
                     }
+                    yield elems.get(idx);
                 }
                 yield Value.nullV();
             }
@@ -425,20 +502,35 @@ public class Interpreter {
     
     private Value divide(Value left, Value right) {
         if (left.getType() == Value.Type.INT && right.getType() == Value.Type.INT) {
-            return right.asInt() != 0 ? Value.intV(left.asInt() / right.asInt()) : Value.nullV();
+            if (right.asInt() == 0) {
+                runtimeError();
+            }
+            return Value.intV(left.asInt() / right.asInt());
         } else if (left.getType() == Value.Type.FLOAT && right.getType() == Value.Type.FLOAT) {
-            return right.asFloat() != 0.0 ? Value.floatV(left.asFloat() / right.asFloat()) : Value.nullV();
+            if (right.asFloat() == 0.0) {
+                runtimeError();
+            }
+            return Value.floatV(left.asFloat() / right.asFloat());
         } else if (left.getType() == Value.Type.INT && right.getType() == Value.Type.FLOAT) {
-            return right.asFloat() != 0.0 ? Value.floatV(left.asInt() / right.asFloat()) : Value.nullV();
+            if (right.asFloat() == 0.0) {
+                runtimeError();
+            }
+            return Value.floatV(left.asInt() / right.asFloat());
         } else if (left.getType() == Value.Type.FLOAT && right.getType() == Value.Type.INT) {
-            return right.asInt() != 0 ? Value.floatV(left.asFloat() / right.asInt()) : Value.nullV();
+            if (right.asInt() == 0) {
+                runtimeError();
+            }
+            return Value.floatV(left.asFloat() / right.asInt());
         }
         return Value.nullV();
     }
     
     private Value modulo(Value left, Value right) {
         if (left.getType() == Value.Type.INT && right.getType() == Value.Type.INT) {
-            return right.asInt() != 0 ? Value.intV(left.asInt() % right.asInt()) : Value.nullV();
+            if (right.asInt() == 0) {
+                runtimeError();
+            }
+            return Value.intV(left.asInt() % right.asInt());
         }
         return Value.nullV();
     }
@@ -502,10 +594,6 @@ public class Interpreter {
     private boolean isTrue(Value value) {
         if (value.getType() == Value.Type.BOOL) {
             return value.asBool();
-        } else if (value.getType() == Value.Type.INT) {
-            return value.asInt() != 0;
-        } else if (value.getType() == Value.Type.FLOAT) {
-            return value.asFloat() != 0.0;
         }
         return false;
     }
@@ -519,8 +607,30 @@ public class Interpreter {
             return String.valueOf(value.asBool());
         } else if (value.getType() == Value.Type.CHAR) {
             return String.valueOf(value.asChar());
+        } else if (value.getType() == Value.Type.STRING) {
+            return value.asString();
         } else if (value.getType() == Value.Type.NULL) {
             return "null";
+        } else if (value.getType() == Value.Type.ARRAY) {
+            List<Value> elems = value.asArray();
+            StringBuilder sb = new StringBuilder("[");
+            for (int i = 0; i < elems.size(); i++) {
+                if (i > 0) sb.append(",");
+                sb.append(valueToString(elems.get(i)));
+            }
+            sb.append("]");
+            return sb.toString();
+        } else if (value.getType() == Value.Type.RECORD) {
+            Map<String, Value> fields = value.asRecord();
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<String, Value> entry : fields.entrySet()) {
+                if (!first) sb.append(",");
+                sb.append(entry.getKey()).append(":").append(valueToString(entry.getValue()));
+                first = false;
+            }
+            sb.append("}");
+            return sb.toString();
         }
         return "unknown";
     }
@@ -533,7 +643,6 @@ public class Interpreter {
         String name = extractTypeName(lvalue.get("name"));
         Value value = null;
         
-        // Procurar a variável nos escopos
         for (Map<String, Value> scope : scopes) {
             if (scope.containsKey(name)) {
                 value = scope.get(name);
@@ -545,7 +654,6 @@ public class Interpreter {
             return Value.nullV();
         }
         
-        // Processar acessos encadeados (array, campo)
         AstNode current = lvalue;
         while (current.get("next") != null) {
             AstNode next = (AstNode) current.get("next");
@@ -556,11 +664,10 @@ public class Interpreter {
                 if (value.getType() == Value.Type.ARRAY && index.getType() == Value.Type.INT) {
                     List<Value> elems = value.asArray();
                     int idx = index.asInt();
-                    if (idx >= 0 && idx < elems.size()) {
-                        value = elems.get(idx);
-                    } else {
-                        return Value.nullV();
+                    if (idx < 0 || idx >= elems.size()) {
+                        runtimeError();
                     }
+                    value = elems.get(idx);
                 } else {
                     return Value.nullV();
                 }
@@ -597,8 +704,12 @@ public class Interpreter {
             AstNode nxt = (AstNode) cur.get("next");
             if ("arrayAccess".equals(nxt.get("type"))) {
                 int i = interpretExpr((AstNode) nxt.get("index")).asInt();
-                base = base.asArray().get(i);
-            } else { // field
+                List<Value> elems = base.asArray();
+                if (i < 0 || i >= elems.size()) {
+                    runtimeError();
+                }
+                base = elems.get(i);
+            } else { 
                 String f = (String) nxt.get("field");
                 base = base.asRecord().get(f);
             }
@@ -610,7 +721,18 @@ public class Interpreter {
     private void assign(AstNode lv, Value v) {
         if (!"lvalue".equals(lv.get("type"))) throw new RuntimeException("not an lvalue");
         if (lv.get("next") == null) {
-            scopes.peek().put(extractTypeName(lv.get("name")), v);
+            String varName = extractTypeName(lv.get("name"));
+            boolean found = false;
+            for (Map<String, Value> scope : scopes) {
+                if (scope.containsKey(varName)) {
+                    scope.put(varName, v);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                scopes.peek().put(varName, v);
+            }
         } else {
             Value base = lookupVar(extractTypeName(lv.get("name")));
             AstNode cur = lv;
@@ -621,14 +743,16 @@ public class Interpreter {
             }
             if ("arrayAccess".equals(cur.get("type"))) {
                 int i = interpretExpr((AstNode) cur.get("index")).asInt();
-                base.asArray().set(i, v);
+                List<Value> elems = base.asArray();
+                if (i < 0 || i >= elems.size()) {
+                    runtimeError();
+                }
+                elems.set(i, v);
             } else if ("fieldAccess".equals(cur.get("type"))) {
                 String f = (String) cur.get("field");
                 Map<String, Value> rec = base.asRecord();
                 if (rec == null) {
-                    // Se o record não foi inicializado, crie um novo
                     rec = new HashMap<>();
-                    // Substitua o valor na variável original
                     scopes.peek().put(extractTypeName(lv.get("name")), Value.recordV(rec));
                 }
                 rec.put(f, v);

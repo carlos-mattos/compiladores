@@ -39,7 +39,6 @@ public class RegressionTest {
                 1
                 """;
 
-        // normaliza CRLF vs LF
         String actual = out.toString().replace("\r\n", "\n").trim();
         assertEquals(expected.trim(), actual);
     }

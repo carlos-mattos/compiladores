@@ -28,12 +28,13 @@ ID      : LETTER (LETTER | DIGIT | '_')* ;
 TYID    : LETTER_UP (LETTER_UP | LETTER | DIGIT | '_')* ;
 INT     : DIGIT+ ;
 FLOAT   : DIGIT* '.' DIGIT+ ;
-CHAR    : '\'' ( '\\' [b] | '\\' DIGIT DIGIT DIGIT | ~['\\\r\n] ) '\'' ;
+CHAR    : '\'' ( '\\' [btnr'\\] | '\\' DIGIT DIGIT DIGIT | ~['\\\r\n] ) '\'' ;
+STRING  : '"' ( ~["\\\r\n] | '\\"' | '\\\\' )* '"' ;
 NULL    : 'null' ;
 
 WS              : [ \t\r\n]+ -> skip ;
 LINE_COMMENT    : '--' ~[\r\n]* -> skip ;
-BLOCK_COMMENT   : '{-' (~[-] | '-' ~[}])* '-}' -> skip ;
+BLOCK_COMMENT   : '{-' (~[{-}] | '-' ~[}])* '-}' -> skip ;
 
 /* Símbolos fixos (ordem importa para evita conflitos) */
 EQ  : '==';

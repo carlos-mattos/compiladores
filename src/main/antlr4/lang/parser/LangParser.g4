@@ -25,7 +25,8 @@ type        : TYID                            #simpleType
             ;
 
 cmd         : block                           #blockCmd
-            | IF expr THEN cmd ELSE cmd       #ifCmd
+            | IF expr THEN cmd ELSE cmd       #ifElseCmd
+            | IF expr THEN cmd                #ifCmd
             | iterateCmd                      #iterate
             | PRINT expr SEMIC?               #printCmd
             | READ lvalue SEMIC?              #readCmd
@@ -65,4 +66,5 @@ expr        : expr '.' ID                     #fieldAccess
             | NEW type                        #newRecord
             | NEW type LBRACK expr RBRACK     #newArray
             | LBRACK exprList? RBRACK         #arrayLit
+            | STRING                         #stringLit
             ; 

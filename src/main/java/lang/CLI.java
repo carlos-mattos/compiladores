@@ -33,6 +33,16 @@ public class CLI {
         }
     }
     
+    private static boolean testMode = false;
+    
+    public static void setTestMode(boolean mode) {
+        testMode = mode;
+    }
+    
+    private static boolean isTestMode() {
+        return testMode;
+    }
+    
     public static void run(String[] args) {
         if (args.length != 2) {
             throw new CLIException("Usage: java -jar lang.jar [-syn|-i] <file>", 1);
@@ -48,22 +58,35 @@ public class CLI {
         try {
             String input = Files.readString(Path.of(filename));
             
+            ErrorListener errorListener = new ErrorListener();
+            
             LangLexer lexer = new LangLexer(CharStreams.fromString(input));
+            lexer.removeErrorListeners();
+            lexer.addErrorListener(errorListener);
+            
             CommonTokenStream tokens = new CommonTokenStream(lexer);
             LangParser parser = new LangParser(tokens);
+            parser.removeErrorListeners();
+            parser.addErrorListener(errorListener);
             
             ParseTree tree = parser.prog();
             
             if (flag.equals("-syn")) {
-                if (parser.getNumberOfSyntaxErrors() == 0) {
+                if (errorListener.getSyntaxErrors() == 0) {
                     System.out.println("accept");
+                    if (!isTestMode()) {
+                        System.exit(0);
+                    }
                 } else {
                     System.out.println("reject");
+                    if (!isTestMode()) {
+                        System.exit(1);
+                    }
                 }
                 return;
             }
             
-            if (parser.getNumberOfSyntaxErrors() > 0) {
+            if (errorListener.getSyntaxErrors() > 0) {
                 throw new CLIException("Syntax errors found!", 1);
             }
             
@@ -71,6 +94,7 @@ public class CLI {
             var ast = (lang.ast.AstNode) builder.visit(tree);
             
             Interpreter interpreter = new Interpreter();
+            interpreter.setTestMode(isTestMode());
             interpreter.interpret(ast);
             
         } catch (IOException e) {

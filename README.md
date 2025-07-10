@@ -2,6 +2,23 @@
 
 Compilador para a linguagem Lang com análise sintática e interpretação funcional.
 
+## Exit Codes
+
+| Código | Significado |
+|--------|-------------|
+| 0 | Sucesso (accept) |
+| 1 | Erro de sintática (reject) |
+| 2 | Função main não encontrada |
+| 3 | Erro de runtime (divisão por zero, índice fora de faixa, etc.) |
+
+## Runtime Errors
+
+O compilador detecta e reporta os seguintes erros de runtime:
+- **Divisão por zero**: `1/0`, `1.0/0.0`
+- **Módulo por zero**: `5%0`
+- **Índice fora de faixa**: `v[5]` quando `v` tem menos de 6 elementos
+- **Condição não-booleana**: `if 1 then ...` (apenas `true`/`false` são aceitos)
+
 ## Pré-requisitos
 
 ### Verificar Java
@@ -107,6 +124,14 @@ java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -i iterate.lang
 echo 'main() { v = [1,2,3]; print v[1] }' > array.lang
 java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -i array.lang
 ```
+
+#### Exemplo com bloco-comentário
+```bash
+echo 'main() { {- comentário não-aninhado -} print 42 }' > comment.lang
+java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -i comment.lang
+```
+
+**Nota:** Comentários de bloco não suportam aninhamento. `{- {- -} -}` resultará em erro léxico.
 
 ## Troubleshooting
 

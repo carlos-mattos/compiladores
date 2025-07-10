@@ -51,12 +51,14 @@
         <version>3.4.0</version>
         <executions>
           <execution>
-            <id>add-antlr-src</id>
+            <id>add-antlr</id>
             <phase>generate-sources</phase>
-            <goals><goal>add-source</goal></goals>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
             <configuration>
               <sources>
-                <source>${project.build.directory}/generated-sources/antlr4</source>
+                <source>target/generated-sources/antlr4</source>
               </sources>
             </configuration>
           </execution>

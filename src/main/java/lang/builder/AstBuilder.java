@@ -94,6 +94,13 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
     @Override
     public AstNode visitIfCmd(LangParser.IfCmdContext ctx) {
         Object condition = visit(ctx.expr());
+        Object thenCmd = visit(ctx.cmd());
+        return new AstNode("if", "condition", condition, "then", thenCmd);
+    }
+
+    @Override
+    public AstNode visitIfElseCmd(LangParser.IfElseCmdContext ctx) {
+        Object condition = visit(ctx.expr());
         Object thenCmd = visit(ctx.cmd(0));
         Object elseCmd = visit(ctx.cmd(1));
         return new AstNode("if", "condition", condition, "then", thenCmd, "else", elseCmd);
@@ -244,7 +251,21 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
                 case 'n': value = '\n'; break;
                 case 't': value = '\t'; break;
                 case 'r': value = '\r'; break;
-                default: value = escape; break;
+                case 'b': value = '\b'; break;
+                case '\'': value = '\''; break;
+                case '\\': value = '\\'; break;
+                default: 
+                    if (Character.isDigit(escape) && text.length() >= 5) {
+                        String octal = text.substring(2, 5);
+                        try {
+                            value = (char) Integer.parseInt(octal, 8);
+                        } catch (NumberFormatException e) {
+                            value = escape;
+                        }
+                    } else {
+                        value = escape;
+                    }
+                    break;
             }
         }
         return new AstNode("char", "value", value);
@@ -266,12 +287,10 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
         Object body = visit(ctx.cmd());
         
         if (ctx.lvalue() != null) {
-            // Forma: ITERATE '(' lvalue ':' expr ')' cmd
             Object lvalue = visit(ctx.lvalue());
             Object expr = visit(ctx.expr());
             return new AstNode("iterate", "id", lvalue, "expr", expr, "body", body);
         } else {
-            // Forma: ITERATE '(' expr ')' cmd
             Object expr = visit(ctx.expr());
             return new AstNode("iterate", "expr", expr, "body", body);
         }
@@ -314,7 +333,7 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
                 current.put("next", fld);
                 current = fld;
                 dotIdx++;
-                i++; // skip field name
+                i++;
             }
         }
         return node;
@@ -356,5 +375,14 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
         String name = ctx.ID().getText();
         Object type = visit(ctx.type());
         return new AstNode("decl", "name", name, "type", type);
+    }
+
+    @Override
+    public AstNode visitStringLit(lang.parser.LangParser.StringLitContext ctx) {
+        String text = ctx.STRING().getText();
+        String value = text.substring(1, text.length() - 1)
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\");
+        return new AstNode("string", "value", value);
     }
 } 
