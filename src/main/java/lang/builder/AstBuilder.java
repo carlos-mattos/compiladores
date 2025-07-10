@@ -43,6 +43,12 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
         
         List<Object> members = new java.util.ArrayList<>();
         
+        if (ctx.decl() != null) {
+            for (var declCtx : ctx.decl()) {
+                members.add(visit(declCtx));
+            }
+        }
+        
         if (ctx.funDecl() != null) {
             for (var funCtx : ctx.funDecl()) {
                 members.add(visit(funCtx));
@@ -315,11 +321,11 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
     }
 
     public AstNode visitNewRecord(LangParser.NewRecordContext ctx) {
-        return new AstNode("newRec", "type", ctx.TYID().getText());
+        return new AstNode("newRec", "type", visit(ctx.type()));
     }
 
     public AstNode visitNewArray(LangParser.NewArrayContext ctx) {
-        return new AstNode("newArr", "type", ctx.TYID().getText(), "size", visit(ctx.expr()));
+        return new AstNode("newArr", "type", visit(ctx.type()), "size", visit(ctx.expr()));
     }
 
     public AstNode visitArrayLit(LangParser.ArrayLitContext ctx) {
@@ -343,5 +349,12 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
 
     public AstNode visitCharType(LangParser.CharTypeContext ctx) {
         return new AstNode("type", "name", "Char");
+    }
+
+    @Override
+    public AstNode visitDecl(LangParser.DeclContext ctx) {
+        String name = ctx.ID().getText();
+        Object type = visit(ctx.type());
+        return new AstNode("decl", "name", name, "type", type);
     }
 } 

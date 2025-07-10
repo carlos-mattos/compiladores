@@ -39,7 +39,7 @@ public class CLITest {
         Path file = createTestFile("main() { print 42 }");
         String output = captureOutput(() -> {
             try {
-                CLI.main(new String[]{"-syn", file.toString()});
+                CLI.run(new String[]{"-syn", file.toString()});
             } catch (Exception e) {
             }
         });
@@ -51,7 +51,7 @@ public class CLITest {
         Path file = createTestFile("main() { print }");
         String output = captureOutput(() -> {
             try {
-                CLI.main(new String[]{"-syn", file.toString()});
+                CLI.run(new String[]{"-syn", file.toString()});
             } catch (Exception e) {
             }
         });
@@ -63,7 +63,7 @@ public class CLITest {
         Path file = createTestFile("main() { print 6 * 7 }");
         String output = captureOutput(() -> {
             try {
-                CLI.main(new String[]{"-i", file.toString()});
+                CLI.run(new String[]{"-i", file.toString()});
             } catch (Exception e) {
             }
         });
@@ -75,7 +75,7 @@ public class CLITest {
         Path file = createTestFile("main() { x = 10; y = 5; if x > y then print x + y else print x - y }");
         String output = captureOutput(() -> {
             try {
-                CLI.main(new String[]{"-i", file.toString()});
+                CLI.run(new String[]{"-i", file.toString()});
             } catch (Exception e) {
             }
         });
@@ -106,7 +106,7 @@ public class CLITest {
 
     @Test
     void newAndField() throws Exception {
-        run("data R{ n: Int; }  main(){ r=new R; r.n=7; print r.n }", "7\n");
+        run("data R{ n:: Int; }  main(){ r=new R; r.n=7; print r.n }", "7\n");
     }
 
     private void run(String code, String expectedOutput) throws Exception {
@@ -120,7 +120,7 @@ public class CLITest {
             PrintStream originalOut = System.out;
             System.setOut(new PrintStream(baos));
             
-            CLI.main(new String[]{"-i", tempFile.toString()});
+            CLI.run(new String[]{"-i", tempFile.toString()});
             
             System.setOut(originalOut);
             String output = baos.toString();

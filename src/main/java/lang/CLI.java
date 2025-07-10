@@ -13,18 +13,36 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class CLI {
+    public static class CLIException extends RuntimeException {
+        public final int exitCode;
+        public CLIException(String message, int exitCode) {
+            super(message);
+            this.exitCode = exitCode;
+        }
+    }
+    
     public static void main(String[] args) {
-        if (args.length != 2) {
-            System.err.println("Usage: java -jar lang.jar [-syn|-i] <file>");
+        try {
+            run(args);
+        } catch (CLIException e) {
+            System.err.println(e.getMessage());
+            System.exit(e.exitCode);
+        } catch (Exception e) {
+            System.err.println("Unexpected error: " + e.getMessage());
             System.exit(1);
+        }
+    }
+    
+    public static void run(String[] args) {
+        if (args.length != 2) {
+            throw new CLIException("Usage: java -jar lang.jar [-syn|-i] <file>", 1);
         }
 
         String flag = args[0];
         String filename = args[1];
 
         if (!flag.equals("-syn") && !flag.equals("-i")) {
-            System.err.println("Usage: java -jar lang.jar [-syn|-i] <file>");
-            System.exit(1);
+            throw new CLIException("Usage: java -jar lang.jar [-syn|-i] <file>", 1);
         }
 
         try {
@@ -46,8 +64,7 @@ public class CLI {
             }
             
             if (parser.getNumberOfSyntaxErrors() > 0) {
-                System.err.println("Syntax errors found!");
-                System.exit(1);
+                throw new CLIException("Syntax errors found!", 1);
             }
             
             AstBuilder builder = new AstBuilder();
@@ -57,8 +74,7 @@ public class CLI {
             interpreter.interpret(ast);
             
         } catch (IOException e) {
-            System.err.println("Error reading file: " + e.getMessage());
-            System.exit(1);
+            throw new CLIException("Error reading file: " + e.getMessage(), 1);
         }
     }
 } 

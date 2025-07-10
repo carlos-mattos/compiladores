@@ -8,6 +8,7 @@ public class Interpreter {
     private final Map<String, Value> variables = new HashMap<>();
     private final Map<String, FunctionDef> functions = new HashMap<>();
     private final Deque<Map<String, Value>> scopes = new ArrayDeque<>();
+    private final Map<String, List<String>> typeTable = new HashMap<>();
     
     public static class FunctionDef {
         public final List<String> params;
@@ -29,19 +30,32 @@ public class Interpreter {
             List<Object> definitions = (List<Object>) ast.get("definitions");
             
             for (Object def : definitions) {
-                if (def instanceof AstNode node && "funDecl".equals(node.get("type"))) {
-                    String name = (String) node.get("name");
-                    @SuppressWarnings("unchecked")
-                    List<Object> params = (List<Object>) node.get("params");
-                    List<String> paramNames = new ArrayList<>();
-                    for (Object param : params) {
-                        if (param instanceof AstNode paramNode) {
-                            paramNames.add((String) paramNode.get("name"));
+                if (def instanceof AstNode node) {
+                    if ("funDecl".equals(node.get("type"))) {
+                        String name = extractTypeName(node.get("name"));
+                        @SuppressWarnings("unchecked")
+                        List<Object> params = (List<Object>) node.get("params");
+                        List<String> paramNames = new ArrayList<>();
+                        for (Object param : params) {
+                            if (param instanceof AstNode paramNode) {
+                                paramNames.add(extractTypeName(paramNode.get("name")));
+                            }
                         }
-                    }
-                    Object body = node.get("body");
-                    if (body instanceof AstNode bodyNode) {
-                        functions.put(name, new FunctionDef(paramNames, bodyNode));
+                        Object body = node.get("body");
+                        if (body instanceof AstNode bodyNode) {
+                            functions.put(name, new FunctionDef(paramNames, bodyNode));
+                        }
+                    } else if ("dataDecl".equals(node.get("type"))) {
+                        String typeName = extractTypeName(node.get("name"));
+                        @SuppressWarnings("unchecked")
+                        List<Object> members = (List<Object>) node.get("members");
+                        List<String> fieldNames = new ArrayList<>();
+                        for (Object member : members) {
+                            if (member instanceof AstNode mNode && "decl".equals(mNode.get("type"))) {
+                                fieldNames.add(extractTypeName(mNode.get("name")));
+                            }
+                        }
+                        typeTable.put(typeName, fieldNames);
                     }
                 }
             }
@@ -103,7 +117,9 @@ public class Interpreter {
                     }
                 } else {                            // iterate(expr)
                     int n = interpretExpr((AstNode) cmd.get("expr")).asInt();
-                    for (int k = 0; k < n; k++) interpretCmd((AstNode) cmd.get("body"));
+                    if (n > 0) {
+                        for (int k = 0; k < n; k++) interpretCmd((AstNode) cmd.get("body"));
+                    }
                 }
             }
             case "print" -> {
@@ -200,7 +216,15 @@ public class Interpreter {
     }
     
     private Value interpretExpr(AstNode expr) {
-        String type = (String) expr.get("type");
+        Object typeObj = expr.get("type");
+        String type;
+        if (typeObj instanceof String) {
+            type = (String) typeObj;
+        } else if (typeObj instanceof AstNode) {
+            type = extractTypeName((AstNode) typeObj);
+        } else {
+            type = String.valueOf(typeObj);
+        }
         
         return switch (type) {
             case "int" -> Value.intV((Integer) expr.get("value"));
@@ -208,7 +232,8 @@ public class Interpreter {
             case "bool" -> Value.boolV((Boolean) expr.get("value"));
             case "char" -> Value.charV((Character) expr.get("value"));
             case "var" -> {
-                String name = (String) expr.get("name");
+                Object nameObj = expr.get("name");
+                String name = extractTypeName(nameObj);
                 Value value = null;
                 for (Map<String, Value> scope : scopes) {
                     if (scope.containsKey(name)) {
@@ -234,7 +259,7 @@ public class Interpreter {
                 @SuppressWarnings("unchecked")
                 List<Object> args = (List<Object>) expr.get("args");
                 if (func instanceof AstNode funcNode && "var".equals(funcNode.get("type"))) {
-                    String funcName = (String) funcNode.get("name");
+                    String funcName = extractTypeName(funcNode.get("name"));
                     FunctionDef function = functions.get(funcName);
                     if (function != null) {
                         Map<String, Value> newScope = new HashMap<>();
@@ -284,7 +309,7 @@ public class Interpreter {
             }
             case "fieldAccess" -> {
                 Value record = interpretExpr((AstNode) expr.get("obj"));
-                String field = (String) expr.get("field");
+                String field = extractTypeName(expr.get("field"));
                 if (record.getType() == Value.Type.RECORD) {
                     Map<String, Value> fields = record.asRecord();
                     if (fields.containsKey(field)) {
@@ -293,7 +318,16 @@ public class Interpreter {
                 }
                 yield Value.nullV();
             }
-            case "newRec" -> Value.recordV(new HashMap<>()); // campos default = null
+            case "newRec" -> {
+                String typeName = extractTypeName(expr.get("type"));
+                Map<String, Value> fields = new HashMap<>();
+                if (typeName != null && typeTable.containsKey(typeName)) {
+                    for (String field : typeTable.get(typeName)) {
+                        fields.put(field, Value.nullV());
+                    }
+                }
+                yield Value.recordV(fields);
+            }
             case "newArr" -> {
                 int n = interpretExpr((AstNode) expr.get("size")).asInt();
                 List<Value> list = new ArrayList<>(Collections.nCopies(n, Value.nullV()));
@@ -496,7 +530,7 @@ public class Interpreter {
             return Value.nullV();
         }
         
-        String name = (String) lvalue.get("name");
+        String name = extractTypeName(lvalue.get("name"));
         Value value = null;
         
         // Procurar a variável nos escopos
@@ -557,7 +591,7 @@ public class Interpreter {
 
     private Value deref(AstNode lv) { /* usa enquanto lê */
         if (!"lvalue".equals(lv.get("type"))) return Value.nullV();
-        Value base = lookupVar((String) lv.get("name"));
+        Value base = lookupVar(extractTypeName(lv.get("name")));
         AstNode cur = lv;
         while (cur.get("next") != null) {
             AstNode nxt = (AstNode) cur.get("next");
@@ -576,9 +610,9 @@ public class Interpreter {
     private void assign(AstNode lv, Value v) {
         if (!"lvalue".equals(lv.get("type"))) throw new RuntimeException("not an lvalue");
         if (lv.get("next") == null) {
-            scopes.peek().put((String) lv.get("name"), v);
+            scopes.peek().put(extractTypeName(lv.get("name")), v);
         } else {
-            Value base = lookupVar((String) lv.get("name"));
+            Value base = lookupVar(extractTypeName(lv.get("name")));
             AstNode cur = lv;
             AstNode prev = null;
             while (cur.get("next") != null) {
@@ -595,10 +629,28 @@ public class Interpreter {
                     // Se o record não foi inicializado, crie um novo
                     rec = new HashMap<>();
                     // Substitua o valor na variável original
-                    scopes.peek().put((String) lv.get("name"), Value.recordV(rec));
+                    scopes.peek().put(extractTypeName(lv.get("name")), Value.recordV(rec));
                 }
                 rec.put(f, v);
             }
         }
+    }
+
+    private String extractTypeName(Object typeObj) {
+        if (typeObj == null) return null;
+        if (typeObj instanceof String s) return s;
+        if (typeObj instanceof AstNode typeNode) {
+            Object tObj = typeNode.get("type");
+            if (!(tObj instanceof String t)) throw new RuntimeException("Tipo inválido em newRec: " + tObj);
+            if ("simpleType".equals(t) || "type".equals(t)) {
+                Object name = typeNode.get("name");
+                return extractTypeName(name);
+            }
+            if ("intType".equals(t)) return "Int";
+            if ("floatType".equals(t)) return "Float";
+            if ("boolType".equals(t)) return "Bool";
+            if ("charType".equals(t)) return "Char";
+        }
+        throw new RuntimeException("new só suporta tipos de registro simples (ex: new R)");
     }
 } 

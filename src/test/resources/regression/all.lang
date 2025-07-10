@@ -1,4 +1,4 @@
-data R { n : Int ; }
+data R { n :: Int ; }
 
 divmod(a::Int, b::Int) : Int, Int {
   q = a / b ;

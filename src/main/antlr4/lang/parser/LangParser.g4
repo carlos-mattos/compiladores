@@ -7,7 +7,7 @@ def         : dataDecl | funDecl ;
 
 dataDecl    : ABSTRACT? DATA TYID LBRACE (decl | funDecl)* RBRACE ;
 
-decl        : ID COLON type SEMIC ;
+decl        : ID DCOLON type SEMIC ;
 
 funDecl     : ID LPAREN params? RPAREN (COLON typeList)? cmd ;
 
@@ -20,7 +20,7 @@ type        : TYID                            #simpleType
             | FLOAT_TYPE                      #floatType
             | BOOL_TYPE                       #boolType
             | CHAR_TYPE                       #charType
-            | LBRACK type RBRACK              #arrayType
+            | type LBRACK RBRACK              #arrayType
             | type STAR type                  #productType
             ;
 
@@ -62,7 +62,7 @@ expr        : expr '.' ID                     #fieldAccess
             | FALSE                           #falseLit
             | CHAR                            #charLit
             | NULL                            #nullLit
-            | NEW TYID                        #newRecord
-            | NEW TYID LBRACK expr RBRACK     #newArray
+            | NEW type                        #newRecord
+            | NEW type LBRACK expr RBRACK     #newArray
             | LBRACK exprList? RBRACK         #arrayLit
             ; 
