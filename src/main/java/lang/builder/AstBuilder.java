@@ -56,7 +56,11 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
         
         if (ctx.funDecl() != null) {
             for (var funCtx : ctx.funDecl()) {
-                members.add(visit(funCtx));
+                Object fnObj = visit(funCtx);
+                if (fnObj instanceof AstNode fn) {
+                    fn.put("ownerType", name);
+                    members.add(fn);
+                }
             }
         }
         
@@ -345,11 +349,11 @@ public class AstBuilder extends LangParserBaseVisitor<Object> {
     }
 
     public AstNode visitNewRecord(LangParser.NewRecordContext ctx) {
-        return new AstNode("newRec", "type", visit(ctx.type()));
+        return new AstNode("newRec", "recType", visit(ctx.type()));
     }
 
     public AstNode visitNewArray(LangParser.NewArrayContext ctx) {
-        return new AstNode("newArr", "type", visit(ctx.type()), "size", visit(ctx.expr()));
+        return new AstNode("newArr", "elemType", visit(ctx.type()), "size", visit(ctx.expr()));
     }
 
     public AstNode visitArrayLit(LangParser.ArrayLitContext ctx) {

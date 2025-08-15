@@ -14,6 +14,7 @@ public class Interpreter {
     private final Map<String, FunctionDef> functions = new HashMap<>();
     private final Deque<Map<String, Value>> scopes = new ArrayDeque<>();
     private final Map<String, List<String>> typeTable = new HashMap<>();
+    private final Set<String> abstractRecords = new HashSet<>();
     private boolean testMode = false;
     
     public void setTestMode(boolean mode) {
@@ -67,12 +68,19 @@ public class Interpreter {
                         }
                     } else if ("dataDecl".equals(node.get("type"))) {
                         String typeName = extractTypeName(node.get("name"));
+                        if (Boolean.TRUE.equals(node.get("isAbstract"))) {
+                            abstractRecords.add(typeName);
+                        }
                         @SuppressWarnings("unchecked")
                         List<Object> members = (List<Object>) node.get("members");
                         List<String> fieldNames = new ArrayList<>();
                         for (Object member : members) {
-                            if (member instanceof AstNode mNode && "decl".equals(mNode.get("type"))) {
-                                fieldNames.add(extractTypeName(mNode.get("name")));
+                            if (member instanceof AstNode mNode) {
+                                Object mType = mNode.get("type");
+                                Object mName = mNode.get("name");
+                                if (mName != null && mType instanceof AstNode) {
+                                    fieldNames.add(extractTypeName(mName));
+                                }
                             }
                         }
                         typeTable.put(typeName, fieldNames);
@@ -110,12 +118,10 @@ public class Interpreter {
                 scopes.pop();
             }
             case "if" -> {
-                Value condition = interpretExpr((AstNode) cmd.get("condition"));
-                if (isTrue(condition)) {
-                    interpretCmd((AstNode) cmd.get("then"));
-                } else if (cmd.get("else") != null) {
-                    interpretCmd((AstNode) cmd.get("else"));
-                }
+                Value c = interpretExpr((AstNode) cmd.get("condition"));
+                if (c.getType() != Value.Type.BOOL) runtimeError();
+                if (c.asBool()) { interpretCmd((AstNode) cmd.get("then")); }
+                else if (cmd.get("else") != null) interpretCmd((AstNode) cmd.get("else"));
             }
             case "iterate" -> {
                 if (cmd.get("id") != null) {      
@@ -348,14 +354,19 @@ public class Interpreter {
                             Value argValue = interpretExpr((AstNode) args.get(i));
                             newScope.put(paramName, argValue);
                         }
-                        Value result = Value.arrayV(new ArrayList<>()); 
+                        Value result = Value.nullV();
+                        List<Value> rets = new ArrayList<>();
                         try {
                             interpretCmd(function.body);
                         } catch (ReturnException e) {
-                            result = Value.arrayV(e.values);   
+                            rets = e.values;
                         }
                         scopes.pop();
-                        yield result;
+                        if (rets.size() == 1) {
+                            yield rets.get(0);
+                        } else {
+                            yield Value.arrayV(rets);
+                        }
                     }
                 }
                 yield Value.nullV();
@@ -398,7 +409,11 @@ public class Interpreter {
                 yield Value.nullV();
             }
             case "newRec" -> {
-                String typeName = extractTypeName(expr.get("type"));
+                String typeName = extractTypeName(expr.get("recType"));
+                if (abstractRecords.contains(typeName)) {
+                    runtimeError();
+                    yield Value.nullV();
+                }
                 Map<String, Value> fields = new HashMap<>();
                 if (typeName != null && typeTable.containsKey(typeName)) {
                     for (String field : typeTable.get(typeName)) {
@@ -748,28 +763,65 @@ public class Interpreter {
                 scopes.peek().put(varName, v);
             }
         } else {
-            Value base = lookupVar(extractTypeName(lv.get("name")));
-            AstNode cur = lv;
-            AstNode prev = null;
-            while (cur.get("next") != null) {
-                prev = cur;
-                cur = (AstNode) cur.get("next");
+            String root = extractTypeName(lv.get("name"));
+            Value container = lookupVar(root);
+            if (container.getType() == Value.Type.NULL) {
+                runtimeError(); return;
             }
-            if ("arrayAccess".equals(cur.get("type"))) {
-                int i = interpretExpr((AstNode) cur.get("index")).asInt();
-                List<Value> elems = base.asArray();
-                if (i < 0 || i >= elems.size()) {
-                    runtimeError();
+            AstNode cur = lv;
+            AstNode next = (AstNode) cur.get("next");
+            while (next.get("next") != null) {
+                if ("arrayAccess".equals(next.get("type"))) {
+                    int i = interpretExpr((AstNode) next.get("index")).asInt();
+                    if (container.getType() != Value.Type.ARRAY) { runtimeError(); return; }
+                    List<Value> elems = container.asArray();
+                    if (i < 0 || i >= elems.size()) { runtimeError(); return; }
+                    container = elems.get(i);
+                } else if ("fieldAccess".equals(next.get("type"))) {
+                    String f = (String) next.get("field");
+                    if (container.getType() != Value.Type.RECORD) { runtimeError(); return; }
+                    Map<String, Value> rec = container.asRecord();
+                    if (!rec.containsKey(f)) { runtimeError(); return; }
+                    container = rec.get(f);
                 }
-                elems.set(i, v);
-            } else if ("fieldAccess".equals(cur.get("type"))) {
-                String f = (String) cur.get("field");
-                Map<String, Value> rec = base.asRecord();
-                if (rec == null) {
-                    rec = new HashMap<>();
-                    scopes.peek().put(extractTypeName(lv.get("name")), Value.recordV(rec));
+                cur = next;
+                next = (AstNode) next.get("next");
+            }
+            if ("arrayAccess".equals(next.get("type"))) {
+                int idx = interpretExpr((AstNode) next.get("index")).asInt();
+                if (container.getType() != Value.Type.ARRAY) { runtimeError(); return; }
+                List<Value> elems = container.asArray();
+                if (idx < 0 || idx >= elems.size()) { runtimeError(); return; }
+                elems.set(idx, v);
+            } else if ("fieldAccess".equals(next.get("type"))) {
+                String f = (String) next.get("field");
+                if (container.getType() != Value.Type.RECORD) { runtimeError(); return; }
+                Map<String, Value> rec = container.asRecord();
+                if (!rec.containsKey(f)) { runtimeError(); return; }
+                Map<String, Value> newRec = new HashMap<>(rec);
+                newRec.put(f, v);
+                if (cur == lv) {
+                    for (Map<String, Value> scope : scopes) {
+                        if (scope.containsKey(root)) {
+                            scope.put(root, Value.recordV(newRec));
+                            break;
+                        }
+                    }
+                } else {
+                    if ("arrayAccess".equals(cur.get("type"))) {
+                        int idx = interpretExpr((AstNode) cur.get("index")).asInt();
+                        String rootVar = extractTypeName(lv.get("name"));
+                        Value rootContainer = lookupVar(rootVar);
+                        if (rootContainer.getType() == Value.Type.ARRAY) {
+                            List<Value> rootElems = rootContainer.asArray();
+                            if (idx >= 0 && idx < rootElems.size()) {
+                                rootElems.set(idx, Value.recordV(newRec));
+                            }
+                        }
+                    }
                 }
-                rec.put(f, v);
+            } else {
+                runtimeError();
             }
         }
     }

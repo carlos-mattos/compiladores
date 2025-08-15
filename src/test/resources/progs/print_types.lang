@@ -1,0 +1,7 @@
+main() {
+  print true;
+  print 'A';
+  print 1.0 + 2;
+}
+
+

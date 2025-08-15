@@ -1,0 +1,7 @@
+abstract data R { a::Int }
+
+g(r::R):Int { return r.a }
+
+main() { print 0 }
+
+

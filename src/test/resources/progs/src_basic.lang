@@ -1,0 +1,7 @@
+main() {
+  x = 40 + 2;
+  if true then print x else print 0
+  iterate(3) { print 7 }
+}
+
+

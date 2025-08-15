@@ -1,0 +1,4 @@
+pair(a::Int, b::Int):Int,Int { return a, b }
+main() { print pair(7,3)[1]; }
+
+

@@ -1,0 +1,7 @@
+main() {
+  a = 0
+  if (a != 0) && (print 999) then print 1
+  if (a == 0) || (print 888) then print 2
+}
+
+
