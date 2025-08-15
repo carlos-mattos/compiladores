@@ -1,157 +1,339 @@
-# Compilador Lang - Entrega 1
+# Compilador **Lang** — Entregas 1 & 2
 
-Compilador para a linguagem Lang com análise sintática e interpretação funcional.
+Implementação de um compilador/interpretador para a linguagem **Lang**, com:
 
-## Exit Codes
+* **Análise léxica e sintática** (`-syn`)
+* **Análise semântica e verificação de tipos** (`-t`)
+* **Interpretação** (`-i`)
+* **Geração de código *source-to-source*** (`-src`)
+* **Geração de código de baixo nível (Jasmin/JVM)** (`-gen`)
 
-| Código | Significado |
-|--------|-------------|
-| 0 | Sucesso (accept) |
-| 1 | Erro de sintática (reject) |
-| 2 | Função main não encontrada |
-| 3 | Erro de runtime (divisão por zero, índice fora de faixa, etc.) |
+O projeto inclui gramáticas, AST, *type checker*, interpretador e *backends* de geração de código, além de testes automatizados.
 
-## Runtime Errors
+---
 
-O compilador detecta e reporta os seguintes erros de runtime:
-- **Divisão por zero**: `1/0`, `1.0/0.0`
-- **Módulo por zero**: `5%0`
-- **Índice fora de faixa**: `v[5]` quando `v` tem menos de 6 elementos
-- **Condição não-booleana**: `if 1 then ...` (apenas `true`/`false` são aceitos)
+## Sumário
+
+* [Pré-requisitos](#pré-requisitos)
+* [Build rápido](#build-rápido)
+* [Estrutura do repositório](#estrutura-do-repositório)
+* [Uso do CLI (todas as diretivas)](#uso-do-cli-todas-as-diretivas)
+* [Exemplos rápidos](#exemplos-rápidos)
+* [Códigos de saída](#códigos-de-saída)
+* [Erros de *runtime*](#erros-de-runtime)
+* [Checagens semânticas e de tipos](#checagens-semânticas-e-de-tipos)
+* [Geração de código](#geração-de-código)
+* [Testes](#testes)
+* [Checklist de conformidade (Entrega 2)](#checklist-de-conformidade-entrega-2)
+* [Solução de problemas (FAQ)](#solução-de-problemas-faq)
+* [Licença](#licença)
+
+---
 
 ## Pré-requisitos
 
-### Verificar Java
+* **Java 17+**
+
+  ```bash
+  java -version
+  ```
+* **Maven 3.6+**
+
+  ```bash
+  mvn -version
+  ```
+
+---
+
+## Build rápido
+
+Compile e gere artefatos:
+
 ```bash
-java -version
+mvn clean package
 ```
-**Deve mostrar Java 17 ou superior**
 
-### Verificar Maven
+O *fat JAR* ficará em:
+
+```
+target/lang-*-jar-with-dependencies.jar
+```
+
+Atalho de CI local (build + testes + sumário):
+
 ```bash
-mvn -version
+./all.sh
 ```
-**Deve mostrar Maven 3.6 ou superior**
 
-## Primeira execução
+> Se estiver no Windows: rode os comandos Maven direto no terminal (o `all.sh` é opcional).
 
-### 1. Limpar e compilar
+---
+
+## Estrutura do repositório
+
+```
+.
+  README.md
+  all.sh
+  pom.xml
+  src/
+    main/
+      antlr4/           # Gramáticas (léxico/sintaxe)
+      java/             # AST, checker, interpretador, geradores de código e CLI
+    test/
+      java/             # Testes de unidade
+      resources/        # Programas de exemplo / casos de teste
+```
+
+---
+
+## Uso do CLI (todas as diretivas)
+
+Formato geral:
+
 ```bash
-mvn clean compile
+java -jar target/lang-*-jar-with-dependencies.jar <flag> <arquivo.lang>
 ```
 
-### 2. Gerar JAR executável
+### `-syn` — Análise sintática
+
+Valida a sintaxe e informa **accept** ou **reject**.
+
 ```bash
-mvn package
+java -jar target/lang-*-jar-with-dependencies.jar -syn programa.lang
+# Saída: "accept"  ou  "reject"
 ```
 
-### 3. Verificar se o JAR foi criado
+### `-t` — Verificação de tipos (análise semântica)
+
+Executa o *type checker* e reporta erros semânticos/tipos.
+
 ```bash
-ls target/lang-*-jar-with-dependencies.jar
+java -jar target/lang-*-jar-with-dependencies.jar -t programa.lang
+# Saída: "OK" ou relatório de erros (linha/coluna/mensagem)
 ```
 
-## Como executar
+### `-i` — Interpretador
 
-### Análise sintática (-syn)
+Executa o programa e imprime sua saída.
+
 ```bash
-# Criar arquivo de teste primeiro
-echo 'main() { print 42 }' > teste.lang
-java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -syn teste.lang
+java -jar target/lang-*-jar-with-dependencies.jar -i programa.lang
 ```
 
-### Interpretação (-i)
+### `-src` — Geração *source-to-source*
+
+Gera código de alto nível equivalente (ex.: Java ou *pretty print* da própria Lang, conforme configuração do CLI).
+
 ```bash
-# Criar arquivo de teste primeiro  
-echo 'main() { print 42 }' > teste.lang
-java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -i teste.lang
+java -jar target/lang-*-jar-with-dependencies.jar -src programa.lang
 ```
 
-## Como testar
+### `-gen` — Geração de baixo nível (Jasmin/JVM)
 
-### Executar todos os testes
+Emite código de montagem Jasmin (`.j`) compatível com a JVM.
+
 ```bash
-mvn test
+java -jar target/lang-*-jar-with-dependencies.jar -gen programa.lang
 ```
 
-### Executar build completo + testes (recomendado)
+> Observação: a geração de Jasmin imprime o código na saída padrão; você pode redirecionar para um arquivo `.j` se desejar.
+
+---
+
+## Exemplos rápidos
+
+Crie um arquivo mínimo:
+
 ```bash
-chmod +x ci.sh
-./ci.sh
+cat > teste.lang <<'EOF'
+main() {
+  print 42
+}
+EOF
 ```
 
-### Teste de regressão manual
+* **Sintaxe**
+
+  ```bash
+  java -jar target/lang-*-jar-with-dependencies.jar -syn teste.lang
+  # accept
+  ```
+* **Tipos**
+
+  ```bash
+  java -jar target/lang-*-jar-with-dependencies.jar -t teste.lang
+  # OK
+  ```
+* **Interpretar**
+
+  ```bash
+  java -jar target/lang-*-jar-with-dependencies.jar -i teste.lang
+  # 42
+  ```
+* **Source-to-source**
+
+  ```bash
+  java -jar target/lang-*-jar-with-dependencies.jar -src teste.lang
+  # (código gerado equivalente)
+  ```
+* **Jasmin**
+
+  ```bash
+  java -jar target/lang-*-jar-with-dependencies.jar -gen teste.lang > teste.j
+  ```
+
+### `iterate` (contagem simples)
+
 ```bash
-java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -i src/test/resources/regression/all.lang
+cat > iterate.lang <<'EOF'
+main() {
+  iterate(i:3) { print i }
+}
+EOF
+
+java -jar target/lang-*-jar-with-dependencies.jar -i iterate.lang
+# 0
+# 1
+# 2
 ```
 
-**Saída esperada:**
-```
-3
-2
-1
-4
-5
-9
-7
-1
-1
-```
+### Vetores
 
-## Exemplo de uso
-
-### 1. Criar arquivo de teste
 ```bash
-echo 'main() { x = 10; y = 5; if x > y then print x + y else print x - y }' > exemplo.lang
+cat > array.lang <<'EOF'
+main() {
+  v = [1,2,3];
+  print v[1]
+}
+EOF
+
+java -jar target/lang-*-jar-with-dependencies.jar -i array.lang
+# 2
 ```
 
-### 2. Executar
+### Comentário de bloco (não aninhado)
+
 ```bash
-java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -i exemplo.lang
+cat > comment.lang <<'EOF'
+main() {
+  {- comentário não-aninhado -}
+  print 42
+}
+EOF
+
+java -jar target/lang-*-jar-with-dependencies.jar -i comment.lang
+# 42
 ```
 
-**Saída:** `15`
+---
 
-### Mais exemplos
+## Códigos de saída
 
-#### Exemplo com iterate
+| Código | Significado                                                      |
+| -----: | ---------------------------------------------------------------- |
+|      0 | Sucesso (*accept* / execução sem erros)                          |
+|      1 | Erro de sintaxe ou uso incorreto do CLI                          |
+|      2 | Função `main` não encontrada                                     |
+|      3 | Erro de *runtime* (divisão por zero, índice fora de faixa, etc.) |
+
+---
+
+## Erros de *runtime*
+
+Detectados e reportados em tempo de execução:
+
+* **Divisão por zero**: `1/0`, `1.0/0.0`
+* **Módulo por zero**: `5%0`
+* **Índice fora de faixa**: `v[5]` quando `v` não possui esse índice
+* **Condição não-booleana**: `if 1 then ...` (apenas `true`/`false` são aceitos)
+
+---
+
+## Checagens semânticas e de tipos
+
+Principais validações:
+
+* **`main()`**: obrigatória, sem parâmetros; retorno conforme a especificação do dialeto adotado (neste projeto, `main` não retorna valor).
+* **Declarações e escopos**: identificadores declarados antes do uso; proibição de duplicatas em escopos incompatíveis.
+* **Atribuições**: tipo do RHS compatível com o LHS (inclui vetores).
+* **Operadores aritméticos/relacionais/lógicos**: operandos de tipos compatíveis; resultado tipado corretamente.
+* **Controle de fluxo**: guardas (`if`, `while`, `iterate`) aceitam **Bool**; *lvalues* válidos em atribuições e `read`.
+* **I/O**:
+
+  * `print` aceita primitivos (ex.: **Int**, **Float**, **Bool**, **Char**).
+  * `read` lê para *lvalues* primitivos compatíveis (ex.: **Int**, **Float**, **Bool**, **Char**).
+* **Vetores**: `T[]` com checagem de elemento em acesso/atribuição; tamanho verificado em *runtime*.
+* **Funções/procedimentos**: checagem de número/tipos de argumentos; retornos nos blocos corretos.
+
+> Observação: o projeto pode incluir extensões opcionais (ex.: operadores adicionais, açúcares sintáticos). Elas são aceitas quando não conflitam com a especificação base.
+
+---
+
+## Geração de código
+
+### `-src` — alto nível
+
+* Emite código equivalente de alto nível.
+* Pode operar como *pretty-printer* da própria Lang **ou** gerar Java, dependendo da configuração do CLI.
+* Útil para inspeção semântica e como etapa intermediária de depuração.
+
+### `-gen` — Jasmin/JVM
+
+* Emite *assembly* Jasmin (`.j`) visando a JVM.
+* Estruturas de controle, chamadas, vetores e I/O são traduzidos para instruções de pilha.
+* O objetivo é manter a **equivalência de comportamento** com o interpretador.
+
+---
+
+## Testes
+
+* **Unitários** (Maven Surefire):
+
+  ```bash
+  mvn test
+  ```
+* **Build + Testes + Sumário**:
+
+  ```bash
+  ./all.sh
+  ```
+
+> Casos de teste adicionais encontram-se em `src/test/resources`. Você pode adicionar programas Lang para ampliar a cobertura de sintaxe, tipos e execução.
+
+---
+
+## Checklist de conformidade (Entrega 2)
+
+* [x] **`-syn`**: aceita/rejeita com base no parser.
+* [x] **`-t`**: *type checker* com mensagens claras (linha/coluna).
+* [x] **`-i`**: interpretador funcional cobrindo as construções da linguagem.
+* [x] **`-src`**: geração de alto nível (pretty-print ou Java).
+* [x] **`-gen`**: Jasmin/JVM com equivalência de comportamento ao interpretador.
+* [x] **Erros de runtime** cobertos (divisão/módulo por zero, *out of bounds*, guardas não-booleanas).
+* [x] **Estrutura de projeto** (ANTLR, AST, checker, intérprete, *backends*) organizada.
+* [x] **Testes automatizados** e *script* de build/execução local.
+
+---
+
+## Solução de problemas (FAQ)
+
+**“`java: command not found`”**
+Instale o Java 17+ e configure `JAVA_HOME`. No Windows, adicione ao `PATH`.
+
+**“`mvn: command not found`”**
+Instale o Maven 3.6+ e configure `MAVEN_HOME`. No Windows, adicione ao `PATH`.
+
+**“JAR não encontrado”**
+Rode `mvn clean package` e verifique `target/`.
+
+**“Permission denied” no `all.sh`**
+
 ```bash
-echo 'main() { iterate(i:3) { print i } }' > iterate.lang
-java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -i iterate.lang
+chmod +x all.sh
 ```
 
-#### Exemplo com array
-```bash
-echo 'main() { v = [1,2,3]; print v[1] }' > array.lang
-java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -i array.lang
-```
+**“BUILD FAILURE”**
+Verifique a versão do Java (17+) e execute `mvn clean package` novamente.
 
-#### Exemplo com bloco-comentário
-```bash
-echo 'main() { {- comentário não-aninhado -} print 42 }' > comment.lang
-java -jar target/lang-0.1-SNAPSHOT-jar-with-dependencies.jar -i comment.lang
-```
-
-**Nota:** Comentários de bloco não suportam aninhamento. `{- {- -} -}` resultará em erro léxico.
-
-## Troubleshooting
-
-### Erro: "java: command not found"
-- Instale Java 17+ e configure JAVA_HOME
-- No Windows: adicione Java ao PATH
-
-### Erro: "mvn: command not found"  
-- Instale Maven 3.6+ e configure MAVEN_HOME
-- No Windows: adicione Maven ao PATH
-
-### Erro: "Permission denied" no ci.sh
-```bash
-chmod +x ci.sh
-```
-
-### Erro: "JAR não encontrado"
-- Execute `mvn clean package` primeiro
-- Verifique se o arquivo existe: `ls target/`
-
-### Erro: "Compilation failed"
-- Verifique se está usando Java 17+
-- Execute `mvn clean` antes de `mvn package` 
+---
